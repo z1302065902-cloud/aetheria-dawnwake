@@ -1,0 +1,25 @@
+{
+  "name": "aetheria-rts",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Aetheria: Dawnwake - single player fantasy RTS (HTML5)",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "build:fast": "vite build",
+    "preview": "vite preview --port 4173",
+    "typecheck": "tsc --noEmit",
+    "test": "node tests/smoke.mjs",
+    "test:prod": "node tests/smoke.mjs http://localhost:4173",
+    "capture": "node tests/capture.mjs"
+  },
+  "dependencies": {
+    "phaser": "^3.88.2"
+  },
+  "devDependencies": {
+    "playwright": "^1.63.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.6"
+  }
+}
