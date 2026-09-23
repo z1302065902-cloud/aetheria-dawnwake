@@ -164,7 +164,7 @@ export const MISSIONS: MissionDef[] = [
   },
 ];
 
-export const PLAYABLE_MISSIONS = new Set<string>(['m01']);
+export const PLAYABLE_MISSIONS = new Set<string>(['m01', 'm02', 'm03', 'm04', 'm05', 'm06', 'm07', 'm08', 'm09', 'm10']);
 
 export function getMission(id: string): MissionDef {
   const m = MISSIONS.find((x) => x.id === id);

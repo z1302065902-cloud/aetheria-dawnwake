@@ -6,7 +6,7 @@ import { ensureTextures, metaOf } from '../art/SpriteFactory';
 import { paintMinimapBase, paintTerrain } from '../art/TerrainPainter';
 import { FxSystem } from '../fx/FxSystem';
 import { World } from '../world/World';
-import { buildGreenValley, type GeneratedMap } from '../world/MapGen';
+import { buildGreenValley, generateMapForMission, type GeneratedMap } from '../world/MapGen';
 import { setupMatch } from '../world/MatchSetup';
 import { MovementSystem } from '../systems/Movement';
 import { CombatSystem } from '../systems/Combat';
@@ -32,6 +32,9 @@ import { buildModifiers, describeModifiers } from '../systems/Relics';
 import { FOG_TEX, VisionGrid } from '../systems/Vision';
 import { applyEquipmentToHero } from '../systems/Equipment';
 import { EnvironmentSystem } from '../systems/Environment';
+import { AutomationSystem } from '../systems/Automation';
+import { ArmyGroupSystem, STANCE_LABEL, type Stance } from '../systems/ArmyGroups';
+import { AdventureSystem } from '../systems/Adventure';
 import { Rng } from '../core/Rng';
 import { rollLoot } from '../data/items';
 import type { MissionDef } from '../data/types';
@@ -93,6 +96,20 @@ export interface HudState {
   boss: { name: string; hp: number; maxHp: number; phase: number; visible: boolean } | null;
   /** recent combat events, newest first */
   feed: Array<{ text: string; kind: 'kill' | 'skill' | 'boss' | 'loss'; age: number }>;
+  /** worker automation panel (single-player: no farmer babysitting) */
+  workers: {
+    total: number;
+    assigned: { gold: number; wood: number; mana: number; idle: number; building: number };
+    mix: { gold: number; wood: number; mana: number };
+    autoWorker: boolean;
+    autoProduction: boolean;
+    autoAttack: boolean;
+    autoRally: boolean;
+  };
+  /** army groups with their stance */
+  armies: Array<{ id: number; name: string; stance: string; count: number }>;
+  /** adventure progress + the run blessing */
+  adventure: { found: number; remaining: number; blessing: string };
   /** Human readable list of the live relic bonuses (shown in the pause overlay). */
   relicLines: string[];
 }
@@ -119,6 +136,11 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
   selection!: SelectionSystem;
   vision!: VisionGrid;
   environment!: EnvironmentSystem;
+  automation!: AutomationSystem;
+  armies!: ArmyGroupSystem;
+  adventure!: AdventureSystem;
+  /** per-run random blessing (Roguelite: maps and main objectives stay fixed) */
+  runBlessing!: { id: string; name: string; desc: string };
   private fogImage!: Phaser.GameObjects.Image;
   private visionTimer = 0;
 
@@ -172,7 +194,8 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
 
     const missionId = data?.missionId ?? 'm01';
     this.mission = getMission(missionId);
-    this.map = buildGreenValley();
+    // m01 keeps its hand-tuned layout; every other mission is generated from its data
+    this.map = missionId === 'm01' ? buildGreenValley() : generateMapForMission(this.mission);
     ensureTextures(this);
     paintTerrain(this, this.map);
     paintMinimapBase(this, this.map);
@@ -206,6 +229,8 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
     this.abilities = new HeroAbilities(this, this.combat);
     this.missions = new MissionSystem(this, this.mission);
     this.ai = new AIController(this, this.movement, this.combat);
+    this.automation = new AutomationSystem(this, this.orders, this.production);
+    this.armies = new ArmyGroupSystem(this, this.movement);
     this.ai.missionRef = this.mission;
 
     // hero
@@ -243,6 +268,54 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
     for (const land of this.map.landings) ruins.push({ x: land.x + 26, y: land.y - 30 });
     this.environment.vision = this.vision;
     this.environment.build({ torches, banners, ruins });
+
+    // ── hero adventures: chests, NPCs, rifts and relic vaults ──
+    this.adventure = new AdventureSystem(this, this.mission.map.seed + this.mission.index * 131);
+    this.adventure.vision = this.vision;
+    this.adventure.build(this.map.playerStart, this.map.searchPoints, 1 + this.mission.index * 0.35);
+    this.adventure.onReward = (r) => {
+      this.pushFeed(`发现 ${r.name}（+${r.gold} 金 / +${r.xp} 经验）`, 'skill');
+      bus.emit(EV.TOAST, `发现：${r.name}`);
+    };
+    this.adventure.onReveal = (spot) => this.pushFeed(`发现 ${spot.name}`, 'skill');
+    this.adventure.onRift = (x, y, unitId, count) => {
+      for (let i = 0; i < count; i++) {
+        const a = (i / count) * Math.PI * 2;
+        const u = this.world.spawnUnit(unitId, x + Math.cos(a) * 60, y + Math.sin(a) * 60, 'voidborn');
+        u.aiState = 'chase';
+        u.homeX = x;
+        u.homeY = y;
+      }
+      this.pushFeed('虚空裂隙涌出了暗影！', 'boss');
+    };
+
+    // ── mission objects: escort caravan / rescue prisoner ──
+    const needsEscort = this.mission.objectives.some((o) => o.kind === 'escort');
+    const needsRescue = this.mission.objectives.some((o) => o.kind === 'rescue');
+    if (needsEscort) {
+      const c = this.world.spawnUnit('caravan', this.map.playerStart.x + 40, this.map.playerStart.y + 140, FACTION.PLAYER);
+      c.team = 1;
+      const goal = this.map.landings[this.map.landings.length - 1] ?? this.map.playerStart;
+      this.orders.move([c], goal.x, goal.y, false);
+      this.pushFeed('补给车出发了，护送它到地图另一侧', 'skill');
+    }
+    if (needsRescue) {
+      const camp = this.world.buildings.find((b) => b.team === 2);
+      const p = this.world.spawnUnit('prisoner', camp ? camp.x - 90 : this.map.playerStart.x + 900, camp ? camp.y + 60 : this.map.playerStart.y + 300, FACTION.WILDBORN);
+      p.team = 2;
+      p.aiState = 'idle';
+      p.homeX = p.x;
+      p.homeY = p.y;
+    }
+
+    // ── automation + army groups ──
+    this.automation.onRally = (u) => this.armies.assignNewUnit(u);
+    this.automation.groupAnchorOf = (u) => this.armies.anchorOf(u);
+    this.armies.update(0);
+
+    // ── Roguelite: one random blessing per run (fixed map + fixed main objectives) ──
+    this.runBlessing = this.rollBlessing();
+    this.world.mods = { ...this.world.mods, ...this.blessingMods(this.runBlessing.id) };
     this.environment.attachWaterShimmer(this.map.w * 40, this.map.h * 40);
     this.environment.smokePuff = (x, y) =>
       this.fx.spawn({ texture: 'fx_smoke', x, y, vy: -14, vx: (Math.random() - 0.5) * 8, life: 1.4, scale0: 0.4, scale1: 1.1, alpha0: 0.28, alpha1: 0, additive: false, tint: 0x9a9488 });
@@ -280,7 +353,10 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
     };
     this.missions.onObjectiveStart = (o) => bus.emit(EV.TOAST, `新目标：${o.def.text}`);
     this.missions.onHeroLevel = (lvl) => bus.emit(EV.BANNER, { text: `指挥官升到 ${lvl} 级`, sub: '等级提升 · 属性成长' });
+    this.missions.onObjectiveRevealed = (o) =>
+      bus.emit(EV.BANNER, { text: '发现隐藏目标', sub: o.def.text });
     this.ai.onWave = (index, count) => {
+      this.missions.wavesSurvived = index;
       bus.emit(EV.BANNER, { text: `第 ${index} 波进攻 (${count} 单位)`, sub: '荒野氏族从营地出发' });
       audio.sfx('bossRoar', 0.4);
     };
@@ -331,6 +407,9 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
         this.vision.paint();
       }
       this.environment.update(dt);
+      this.automation.update(dt);
+      this.armies.update(dt);
+      this.adventure.update(dt);
       this.orders.update(dt);
       this.ai.update(dt);
       this.movement.update(dt);
@@ -547,6 +626,38 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
       bus.on('ui:minimap-click', (p: { x: number; y: number }) => {
         this.cameras.main.centerOn(p.x * WORLD_W, p.y * WORLD_H);
       }),
+      bus.on('ui:worker-mix', (p: { kind: 'gold' | 'wood' | 'mana'; delta: number }) => {
+        this.automation.setMix(p.kind, p.delta);
+        bus.emit(EV.TOAST, `工人配比：金 ${this.automation.mix.gold} · 木 ${this.automation.mix.wood} · 晶 ${this.automation.mix.mana}`);
+      }),
+      bus.on('ui:automation-toggle', (key: 'autoWorker' | 'autoProduction' | 'autoAttack' | 'autoRally') => {
+        this.automation.toggle(key);
+        const on = this.automation.settings[key];
+        bus.emit(EV.TOAST, `${key} → ${on ? '开启' : '关闭'}`);
+      }),
+      bus.on('ui:army-stance-cycle', (groupId: number) => {
+        const order: Stance[] = ['followHero', 'guardBase', 'autoAttack', 'holdPoint'];
+        const cur = this.armies.group(groupId).stance;
+        const next = order[(order.indexOf(cur) + 1) % order.length];
+        this.armies.setStance(groupId, next);
+        bus.emit(EV.TOAST, `编队 ${groupId}：${STANCE_LABEL[next]}`);
+      }),
+      bus.on('ui:army-select', (groupId: number) => {
+        const members = this.armies.membersOf(groupId);
+        if (members.length === 0) {
+          // empty group: assign the current selection
+          const sel = this.selection.units.filter((u) => !u.isHero);
+          if (sel.length === 0) {
+            bus.emit(EV.TOAST, `编队 ${groupId} 为空（先框选部队再点编号）`);
+            return;
+          }
+          this.armies.assign(groupId, sel);
+          bus.emit(EV.TOAST, `${sel.length} 个单位编入编队 ${groupId}（${this.armies.group(groupId).name}）`);
+          return;
+        }
+        this.selection.setUnits(members);
+        bus.emit(EV.SELECTION);
+      }),
       bus.on('ui:toggle-pause', () => this.togglePause()),
       bus.on('ui:return-menu', () => this.returnToMenu()),
       bus.on('ui:retry', () => this.restartMission()),
@@ -624,6 +735,8 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
     const wp = cam.getWorldPoint(p.x, p.y);
     const units = this.selection.units;
     if (units.length === 0) return;
+    this.markManual(units, 6);
+    this.markManual(units, 6);
 
     const enemyUnit = this.world.nearestEnemy(wp.x, wp.y, 34, 1);
     if (enemyUnit) {
@@ -665,6 +778,11 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
 
   // ────────────────────────── building placement ──────────────────────────
 
+  /** Player actions mark a manual hold so automation backs off for a few seconds. */
+  private markManual(units: Unit[], seconds = 8): void {
+    this.automation?.holdUnits(units, seconds);
+  }
+
   beginPlacement(buildingId: string): void {
     const def = getBuilding(buildingId);
     if (!this.world.canAfford(def.cost)) {
@@ -674,6 +792,8 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
     }
     this.placementId = buildingId;
     this.pendingAbility = null;
+    // stop auto-spending so the player's building is always affordable
+    this.automation?.holdProduction(12);
     const key = `b_${buildingId}`;
     if (this.ghost) this.ghost.destroy();
     this.ghost = this.add.image(0, 0, key).setOrigin(0.5, metaOf(key).sy).setAlpha(0.6).setScale(metaOf(key).sx).setDepth(DEPTH.FX);
@@ -712,7 +832,7 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
     this.world.spend(def.cost);
     const site = this.world.spawnBuilding(id, wp.x, wp.y, FACTION.PLAYER, false);
     audio.sfx('build', 0.6);
-    this.build.startConstruction(site);
+    this.build.startConstruction(site, (assigned) => this.markManual(assigned, 30));
     // keep placing while shift is held (classic RTS)
     const shift = (pointer.event as MouseEvent | undefined)?.shiftKey;
     if (!shift) this.cancelPlacement();
@@ -938,9 +1058,25 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
       paused: this.paused,
       ended: this.ended,
       fps,
-      relicLines: describeModifiers(w.mods),
+      // pure progression view: relics + talents, excluding the per-run blessing
+      relicLines: describeModifiers(buildModifiers(save.current.hero.relics, save.current.hero.talents)),
       boss: this.bossView(),
       feed: this.feed.slice(0, 5),
+      workers: {
+        total: this.automation.view.total,
+        assigned: this.automation.view.assigned,
+        mix: this.automation.view.mix,
+        autoWorker: this.automation.settings.autoWorker,
+        autoProduction: this.automation.settings.autoProduction,
+        autoAttack: this.automation.settings.autoAttack,
+        autoRally: this.automation.settings.autoRally,
+      },
+      armies: this.armies.view.map((g) => ({ id: g.id, name: g.name, stance: g.stance, count: g.count })),
+      adventure: {
+        found: this.adventure.collected.length,
+        remaining: this.adventure.remaining,
+        blessing: this.runBlessing ? `${this.runBlessing.name}：${this.runBlessing.desc}` : '',
+      },
     };
   }
 
@@ -985,6 +1121,42 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
     this.time.delayedCall(1100, () => {
       this.speed = prev;
     });
+  }
+
+  /** GameCtx: every unit produced is routed through the automation/army-group pipeline. */
+  onUnitProduced(unit: Unit): void {
+    if (unit.isHero || unit.team !== 1) return;
+    this.automation.rallyNewUnit(unit);
+  }
+
+  /** Per-run random blessing. Map layout and main objectives never change. */
+  private rollBlessing(): { id: string; name: string; desc: string } {
+    const pool = [
+      { id: 'blade', name: '锋刃祝福', desc: '本局所有单位攻击 +10%' },
+      { id: 'swift', name: '疾风祝福', desc: '本局技能冷却 -10%' },
+      { id: 'bulwark', name: '壁垒祝福', desc: '本局英雄与近战生命 +15%' },
+      { id: 'harvest', name: '丰饶祝福', desc: '本局采集速度 +15%' },
+      { id: 'march', name: '行军祝福', desc: '本局部队移动速度 +8%' },
+    ];
+    const rng = new Rng((Date.now() ^ (this.mission.index * 7919)) & 0xffffffff);
+    return rng.pick(pool);
+  }
+
+  private blessingMods(id: string): Partial<typeof this.world.mods> {
+    switch (id) {
+      case 'blade':
+        return { heroDamage: this.world.mods.heroDamage + 0.1 };
+      case 'swift':
+        return { cooldownMul: 0.9 };
+      case 'bulwark':
+        return { meleeHp: this.world.mods.meleeHp + 0.15 };
+      case 'harvest':
+        return { harvestRate: this.world.mods.harvestRate + 0.15 };
+      case 'march':
+        return { unitSpeed: this.world.mods.unitSpeed + 0.08 };
+      default:
+        return {};
+    }
   }
 
   private waveIndexSafe(): number {

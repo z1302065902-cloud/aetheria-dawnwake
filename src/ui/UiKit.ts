@@ -105,7 +105,13 @@ export class Button {
     });
   }
 
+  /** False once the scene's display list destroyed this button (e.g. after a restart). */
+  isAlive(): boolean {
+    return !!this.rect.scene && !!this.label.scene;
+  }
+
   setLabel(s: string): this {
+    if (!this.label.scene) return this;
     this.label.setText(s);
     return this;
   }
@@ -126,6 +132,7 @@ export class Button {
   }
 
   setEnabled(v: boolean): this {
+    if (!this.isAlive()) return this;
     this.enabled = v;
     this.rect.setAlpha(v ? 1 : 0.45);
     this.label.setAlpha(v ? 1 : 0.5);
@@ -133,6 +140,7 @@ export class Button {
   }
 
   setVisible(v: boolean): this {
+    if (!this.isAlive()) return this;
     this.visible = v;
     this.rect.setVisible(v);
     this.label.setVisible(v);
@@ -140,6 +148,7 @@ export class Button {
   }
 
   setPosition(x: number, y: number): this {
+    if (!this.isAlive()) return this;
     this.x = x;
     this.y = y;
     this.rect.setPosition(x, y);
@@ -148,6 +157,7 @@ export class Button {
   }
 
   setSize(w: number, h: number): this {
+    if (!this.isAlive()) return this;
     this.w = w;
     this.h = h;
     this.rect.setSize(w, h);

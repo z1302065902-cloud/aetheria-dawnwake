@@ -11,14 +11,17 @@
 >
 > 最近一次结果（2026-09-23 第四轮 · 战斗表现升级）：
 > **smoke 60/60（dev 与生产构建各一遍）· GPU 11/11 · layout 24/24 · soak 6/6**，控制台零 pageerror。
+>
+> ⚠️ **第五轮（单人向重做）正在进行中**：`npm run typecheck` 通过，新增 `tests/campaign.mjs` **5/36 失败**，
+> `tests/smoke.mjs` / `tests/singleplayer.mjs` 本轮未跑完。新增的 F 组条目按三档如实记状态，**未验证的记为「部分实现」，不记为已实现**。
 
 ## 汇总
 
 | 状态 | 条数 |
 |---|---|
 | ☑ 已实现 | 47 |
-| ◐ 部分实现 | 4 |
-| ☐ 未实现 | 1 |
+| ◐ 部分实现 | 4 (+6 = 10，含第五轮 F-01/F-03..F-07) |
+| ☐ 未实现 | 1 (+1 = 2，含 F-02 十关战役) |
 
 **第四轮（战斗表现升级）关闭的项**：单位视觉与动画（C-08）、攻击表现（C-09）、受击反馈（C-10）、死亡效果（C-11）、
 技能表现（C-12）、镜头震动预算（C-13）、战场环境动画（C-14）、战斗信息（C-15）、粒子池化（D-06）、单位规模性能表（D-07）；
@@ -452,6 +455,77 @@
 
 ---
 
+## F. 单人向重做（第五轮 · 进行中，WIP）
+
+> 本轮状态：**代码已提交为 WIP，但未全部验证通过**。
+> 实测：`npm run typecheck` ✅；`node tests/campaign.mjs` ❌ **5/36 失败**（详见 F-02）；
+> `node tests/smoke.mjs` / `node tests/singleplayer.mjs` 本轮未跑完 → 接手必须先跑这两条补测。
+
+### F-01 自动化：基地与经济不需要玩家盯
+- 标准：闲置工人自动按金/木/晶配比去干活；生产建筑自动排产；**手动命令优先于自动化**。
+- 验证方式：`node tests/singleplayer.mjs`（自动化段）—— ① 工人必须有 `gatherGo` 目标且分到目标资源；
+  ② 玩家手动下 `orders.move` 后 10s 内工人**不得**被自动化拉回资源点；③ 关掉 `autoWorker` 后闲置工人保持 `idle`。
+- 状态：◐ 部分实现（机制已写、HUD 已接；断言本轮未跑完）
+- 实测结果：`src/systems/Automation.ts` 存在且被 `BattleScene` 接线（`this.automation.update(dt)`），
+  HUD `ui:worker-mix` / `ui:automation-toggle` 事件已接；但 `tests/singleplayer.mjs` 本轮未跑出结果。
+- 代码位置：`src/systems/Automation.ts`、`src/scenes/BattleScene.ts:232,311-313,410,630-635`、`src/scenes/HudScene.ts`
+- 备注：`holdUnits(units, seconds)` 与 `holdProduction(12)` 是「手动优先」的实现路径（`BattleScene:781-797` 每次玩家下令都会调）。
+
+### F-02 十关战役全部可玩（m01–m10）★ 未完成
+- 标准：每关都能开局（地图连通 / 有基地 / 有敌方营地 / 有资源 / 有中立怪 / Boss 接线正确）**且能推到 Victory**。
+- 验证方式：`node tests/campaign.mjs`，10 关 × 4 断言。
+- 状态：☐ 未实现（35/40 项通过；5 关走不到胜利）
+- 实测结果（2026-09-23 15:1x，完整原文）：
+
+```
+FAIL campaign[m01]: reaches Victory — o1:done o2:active o3:pending o4:pending o5:pending o6:failed o7:done o8:active
+FAIL campaign[m04]: reaches Victory — o1:active o2:pending
+FAIL campaign[m06]: reaches Victory — o1:active o2:pending
+FAIL campaign[m08]: reaches Victory — o1:done o2:failed
+FAIL campaign[m09]: reaches Victory — o1:done o2:active
+```
+
+- 已通过的部分：10/10 关「map + base + camps + resources + hero」、10/10 关「英雄能从基地寻路到敌营」、10/10 关「有主线+可选目标」、10/10 关「无运行时 pageerror」。
+- 代码位置：`src/data/missions.ts:PLAYABLE_MISSIONS`、`src/world/MapGen.ts:generateMapForMission()`、`tests/campaign.mjs`
+- 备注：**先分清是脚本缺口还是游戏 bug，不许猜**。`tests/campaign.mjs` 只强制计数器 + 手动摆位，不盖建筑、不造兵 →
+  `m01 o2:建造兵营` 停在 `active` 很可能是脚本缺口；而 `m01 o6:failed`（英雄真的死了）与 `m08 o2:failed` 更像真 bug。
+
+### F-03 新目标类型：escort / rescue / defend / hidden
+- 标准：护送对象死亡 → 目标判负；营救目标真正被解救后需要送回城堡；隐藏目标在其 `revealAfter` 完成前不出现在 HUD。
+- 验证方式：`node tests/campaign.mjs` 里 m02（escort）/ m04（rescue）/ m05（survive+defend）/ m09（hidden）这几关的 `reaches Victory`。
+- 状态：◐ 部分实现（m02/m05/m10 通过；m04 卡在 `o1:explore active`，其余隐藏/护护送分支只有单点证据）
+- 实测结果：m02 `o1:done o2:done`、m05 `o1:done o2:done`、m10 `o1:done o2:done`；m04 `o1:active o2:pending`。
+- 代码位置：`src/systems/Mission.ts`（`defend / escort / rescue / explore` 与 `hidden`+`revealAfter` 解锁循环）
+- 备注：`escort` 用 `world.map.landings[last]` 当终点；`rescue` 用「英雄贴到 90px 内 → prisoner 转 team 1 → 回城堡 190px」两段判定。
+
+### F-04 编组与姿态
+- 标准：3 个编组存在、可换姿态；姿态能真的把成员集合到 anchor（不是只改个枚举值）。
+- 验证方式：`node tests/singleplayer.mjs`（编组段）—— 换姿态后断言成员确实朝 anchor 移动（成员到位数 > 0）。
+- 状态：◐ 部分实现（系统与 HUD 已接；断言本轮未跑完）
+- 实测结果：`src/systems/ArmyGroups.ts` 存在（185 行，4 姿态），`BattleScene:233` 已实例化、`313` 已接 `assignNewUnit / anchorOf`。
+
+### F-05 冒险层（宝箱 / NPC / 秘境 / 裂隙 / 遗物）
+- 标准：地图上真的出现了这些点位；英雄靠近能拿到奖励（金币/XP/装备/遗物）并且奖励真的入账。
+- 验证方式：`node tests/singleplayer.mjs`（冒险段）—— 断言 `adventure.spots` 五类都有，且把一个点位摆到英雄脚下后 `found` 增加、XP/金币变化。
+- 状态：◐ 部分实现（系统 + 点位贴图 + 拾取接线已完成；断言本轮未跑出结果）
+- 实测结果：`src/systems/Adventure.ts`（236 行）已实例化于 `BattleScene:273-281`（含 `onReward / onReveal / onRift` 回调）；
+  `SpriteFactory` 新增 `drawChest / drawCache / drawNpc / drawRift`。
+
+### F-06 每局随机祝福（地图与主线固定）
+- 标准：每局恰好 1 个祝福，且**真的改数值**（不是只弹个横幅）。
+- 验证方式：`node tests/singleplayer.mjs`（祝福段）+ 原 `npm test` 的遗物断言（已改成下界检查，允许祝福叠加）。
+- 状态：◐ 部分实现（`blessingMods()` 已接 `world.mods`，含新的 `cooldownMul`；断言本轮未跑出结果）
+- 实测结果：`BattleScene:316-318` `world.mods = { ...world.mods, ...this.blessingMods(this.runBlessing.id) }`；
+  `smoke.mjs` 的遗物断言已改为「≥ 原定值 且 4 条文案全在」以适应随机祝福叠加。
+
+### F-07 地面去方块感 + 四足美术
+- 标准：1600×900 截图里看不到规则方块边界；四足单位与兽人同屏能一眼分辨。
+- 验证方式：**人工看截图** `artifacts/layout-1600x900.png`（本轮未重拍）；四足看 `artifacts/30-units-lineup.png`。
+- 状态：◐ 部分实现（代码已写：双八度 value noise + 关节腿/摆尾/鬃毛/颚齿/角/躺地帧；**尚无新截图佐证**）
+- 实测结果：未实测（本轮没有重跑 `npm run capture` / `test:layout`）。
+
+---
+
 ## 反复踩过的坑（每条都有实测）
 
 1. **UI 深度搞反**：`staticG` 设了 `depth=1`，而面板/按钮/图标都是默认 0 → 面板遮住了技能图标和按钮。改成静态层用插入顺序在最底。
@@ -468,6 +542,9 @@
 
 ## 下一轮建议（按优先级，每条都写判据）
 
+0. **★ 关闭第五轮的欠账：`node tests/campaign.mjs` 36/36 全绿**（现在 5 项失败：m01/m04/m06/m08/m09 走不到 Victory）。
+   先分清「测试脚本没驱动到位」还是「目标判定真有 bug」—— 边界写法与已实测输出见 `docs/PROGRESS.md` 的「一之二。」。
+   然后补跑 `npm test`（60 项）与 `node tests/singleplayer.mjs`，确认自动化 / 编组 / 冒险 / 祝福这四块真的成立。
 1. **真实 GPU FPS 实测**：在带 GPU 的 Chrome 里跑 92 单位对局，`HUD 右上角 FPS` 应稳定 ≥58；同时用 Playwright 4 设备矩阵（1200×1113@2 / 1024×768@2 / 844×390@2 / 390×844@3）截图并断言 HUD 面板不重叠。
 2. **遗物加成接入战斗**（判据：带着 `flameRelic` 打一场，法术伤害数字比不带时高 ~10%，且可用断言验证）。
 3. **尸体与特效池化**（判据：连续 3 局后 `game.renderer` 相关对象数不增长；`Pool` 的 capacity 稳定）。

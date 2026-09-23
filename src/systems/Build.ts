@@ -16,7 +16,7 @@ export class BuildSystem {
   ) {}
 
   /** Called by the input layer when the player confirms a placement. */
-  startConstruction(site: Building): void {
+  startConstruction(site: Building, onAssigned?: (units: Unit[]) => void): void {
     const { world } = this.ctx;
     const workers = world.units.filter((u) => u.team === 1 && u.def.role === 'worker' && !u.dead);
     if (workers.length === 0) return;
@@ -25,7 +25,10 @@ export class BuildSystem {
     const byDistance = workers.slice().sort((a, b) => Math.hypot(a.x - site.x, a.y - site.y) - Math.hypot(b.x - site.x, b.y - site.y));
     const idle = byDistance.filter((u) => u.state === 'idle' || u.state === 'move' || u.state === 'attackMove');
     const chosen = (idle.length > 0 ? idle : byDistance).slice(0, 3);
-    if (chosen.length > 0) this.orders.build(chosen, site);
+    if (chosen.length > 0) {
+      this.orders.build(chosen, site);
+      onAssigned?.(chosen);
+    }
   }
 
   update(dt: number): void {

@@ -1,7 +1,9 @@
 # Aetheria: Dawnwake — 交接 / 进度文档
 
 > **换 agent、隔天续做、上下文压缩后，先读这一份。**
-> 最后更新：2026-09-23（第四轮：**战斗表现升级** —— 单位动画 / 受击反馈 / 死亡演出 / 技能特效 / 环境动画 / 战斗信息 / 粒子池化 / 性能表）
+> 最后更新：2026-09-23（第五轮进行中：**单人向重做** —— 自动化 / 编组姿态 / 冒险层 / 随机祝福 / 十关解锁 / 地面去方块感 / 四足美术）
+> ⚠️ 第五轮的代码**已提交为 WIP**（提交信息带 `wip(singleplayer)`），**未完全验证通过**：
+> `tests/campaign.mjs` 有 **5 项失败**，详见下面「一之二。」与「四、已知问题」。接手请从那里开始。
 
 ---
 
@@ -30,6 +32,63 @@ CPU 随单位数线性增长（约 1.4µs/单位），60 单位只占 60FPS 预�
 
 工程位置：`/Users/zsy/Desktop/游戏项目/aetheria-rts`
 技术栈：Phaser 3.88.2 + TypeScript 5.9 + Vite 7；**零第三方素材**（美术/音效全部运行时代码生成）。
+
+---
+
+## 一之二、进行中：单人向重做（第五轮 WIP）★ 接手从这里开始
+
+**设计转向**：从「经典 RTS 微操」转向 **英雄 > 军队 > 基地 > 经济** 的单人向体验 ——
+玩家操作英雄冒险，基地与经济交给自动化，玩家可以随时关掉/接管。
+
+**新增（未验证完成）**
+
+| 模块 | 文件 | 做了什么 |
+|---|---|---|
+| 自动化 | `src/systems/Automation.ts`（278 行，新） | `autoWorker`（闲置工人按配比自动去金/木/晶，HUD 用 `+/-` 调配比）、`autoProduction`（生产建筑自动排产并留建造储备金）、`autoAttack`、`autoRally`；**手动指令永远优先**（`holdUnits` / `holdProduction` 把被动过的单位/建筑锁几秒） |
+| 编组姿态 | `src/systems/ArmyGroups.ts`（185 行，新） | 3 个编组 + 4 种姿态 `followHero / guardBase / autoAttack / holdPoint`，姿态决定 anchor，系统按姿态自动重发移动令 |
+| 冒险层 | `src/systems/Adventure.ts`（236 行，新） | 地图上放 chest / npc / cache / rift / relic 五类点位；英雄靠近拾取 → 奖励（金币/XP/装备/遗物）；rift 会刷怪；带视野联动（未探索不显示） |
+| 随机祝福 | `BattleScene.blessingMods()` | 每局随机 1 个 blessing（地图与主线固定，符合 roguelite「局内变量」约定）；`MatchModifiers` 新增 `cooldownMul` |
+| 十关解锁 | `src/data/missions.ts` | `PLAYABLE_MISSIONS = m01..m10`（原来是 `{m01}`） |
+| 程序化布点 | `src/world/MapGen.ts:generateMapForMission()` | 按 `MapDef.biome + enemyCamps + objectives` 自动生成任意关卡的地图（资源环、神龛数量按目标需求生成、中立怪、搜索点），不用手画 9 张图 |
+| 新目标类型 | `src/systems/Mission.ts` | `escort`（护送 `caravan` 到终点）、`rescue`（英雄贴近解锁 `prisoner` → 带回城堡）、`defend`（守建筑 / 保单位存活 / 守 N 波 `wavesSurvived`）、**隐藏目标**（`hidden` + `revealAfter`，满足条件才显示并触发 `onObjectiveRevealed`） |
+| 新单位数据 | `src/data/units.ts` | `caravan` 补给车、`prisoner` 被囚的骑士 |
+| 地面去方块感 | `src/art/TerrainPainter.ts` | 双八度 value noise + 草簇/碎石/小花细节，替代原来「逐格三色」 |
+| 四足美术 | `src/art/SpriteFactory.ts` / `UnitRenderer.ts` | 野兽/Boss 分层重画（肩肘腕/膝腿关节、摆尾、鬃毛、颚齿、角、躺地死亡帧）；新增 chest/cache/npc/rift 点位贴图 |
+| HUD | `src/scenes/HudScene.ts` | 工人配比面板（`+/-`）、自动化开关、冒险进度 + 本局祝福 |
+
+**实测验证状态（2026-09-23 15:1x，dev server 5173）**
+
+| 命令 | 结果 |
+|---|---|
+| `npm run typecheck` | ✅ 通过 |
+| `node tests/campaign.mjs`（新，10 关 × 4 断言 = 36 项） | ❌ **5 项失败**（见下） |
+| `node tests/smoke.mjs`（原 60 项，本轮改过 3 处 fixture） | 待补测（本轮只跑到中途 13 项全过） |
+| `node tests/singleplayer.mjs`（新，单人向设计断言） | 待补测 |
+
+**campaign 的 5 项失败（原样记录，未修）**
+
+```
+FAIL campaign[m01]: reaches Victory — o1:done o2:active o3:pending o4:pending o5:pending o6:failed o7:done o8:active
+FAIL campaign[m04]: reaches Victory — o1:active o2:pending
+FAIL campaign[m06]: reaches Victory — o1:active o2:pending
+FAIL campaign[m08]: reaches Victory — o1:done o2:failed
+FAIL campaign[m09]: reaches Victory — o1:done o2:active
+```
+
+**下一轮的第一件事：分清「测试脚本没覆盖」还是「目标判定真有 bug」**（**未区分，别猜**）
+
+- `tests/campaign.mjs` 只强制了计数器（`goldDeposited / producedCombatUnits / buildingsDestroyed / wavesSurvived`）+ 手动摆位（caravan / prisoner / shrine），
+  **不盖建筑、不造兵**。所以 `m01 o2:建造兵营` 一直 `active` 很可能是**脚本缺口**，不是游戏 bug。
+- 但 `m01 o6:failed`（指挥官未阵亡）= 英雄**真的死了**；`m08 o2:failed` 也是 `failed`，**这两条更像真 bug**。
+- `m04 o1`（explore）/`m06 o1`（占 2 神龛）/`m09 o2` — 需要确认是判定条件（视野 / 神龛数 / 计数器）还是脚本没驱动到位。
+
+**接手的做法建议（每条都要留下实测输出）**
+
+1. 先跑 `node tests/campaign.mjs` 复现这 5 条（命令与预期见上）。
+2. 对每一关：先用 DevTools 钩子读 `b.missions.objectives.map(o => `${o.def.id}:${o.state}:${o.progress}/${o.total}`)` + `b.missions.wavesSurvived`
+   + `b.mission.objectives`，判断是「脚本没驱动」还是「判定不成立」。
+3. 只在确认是游戏 bug 时才改 `src/`；是脚本缺口就改 `tests/campaign.mjs`（加 `build` 驱动 / 真实开火），**不许为了让测试变绿去放宽断言**。
+4. 单关真能跑到胜利后，再把 10 关逐关跑通，然后跑 `npm test` + `test:prod` + `test:gpu` + `test:layout` + `test:soak` 全套回归。
 
 ---
 
@@ -139,8 +198,12 @@ node tests/capture.mjs                          # 生成 artifacts/ 截图
 
 ## 四、已知问题（按优先级）
 
-1. **战役 02–10 与另外两张地图只有数据**：每关的目标/波次/营地/Boss/简报都写好了，`MAPS` 里三张图的 biome 参数也在，
-   但只有 Green Valley 做了完整布点 → 其余不可玩。
+0. **★ 十关解锁了但只有一半能跑通（第五轮 WIP 的欠账）**：`PLAYABLE_MISSIONS` 已放开 m01–m10，
+   程序化布点让 10 关**都能开局**（地图连通、有基地/营地/资源/中立怪/Boss 接线，36 项断言里 31 项通过），
+   但 **m01 / m04 / m06 / m08 / m09 走不到 Victory**（见「一之二。」的 5 条 FAIL 原文）。
+   → 判据：`node tests/campaign.mjs` 36/36 全绿。
+1. **战役 02–10 与另外两张地图只有数据**（第四轮时的状态，现已被第 0 条取代）：每关的目标/波次/营地/Boss/简报都写好了，
+   `MAPS` 里三张图的 biome 参数也在，但只有 Green Valley 做了完整布点 → 其余不可玩。
    → 判据：每关都能用 smoke 模板跑到 Victory。
 2. **地形「地面」仍偏方块拼贴**：地表之上的装饰已全部改为带动画对象，但地面本身仍是逐格取色。
    → 判据：加一层低幅噪声/细节后，同一视口下看不到规则方块边界。
@@ -155,6 +218,9 @@ node tests/capture.mjs                          # 生成 artifacts/ 截图
 7. 商业化预留（皮肤/主题接口）未做——按计划留到发布阶段，且**不做客户端假门闸**。
 
 **前两轮列出的项已全部关闭**：真实 GPU 帧时、遗物只发不生效、阵型重叠、疑似泄漏、战争迷雾、装备/天赋闭环、第 5 首音乐。
+
+**第五轮新引入、还没关闭的**：campaign 目标链 5 关不通（第 0 条）；自动化与手动指令的优先级只有单侧验证（`holdUnits` 有断言，
+「玩家连续下 3 次不同命令不被覆盖」的用例还没写）；冒险层只做了「英雄能拾取」的路径，NPC 对话/裂隙难度曲线未验证。
 
 ---
 
@@ -189,6 +255,8 @@ node tests/capture.mjs                          # 生成 artifacts/ 截图
 | 25 | 场景重启后纹理对象失效 | 之前每次 `create()` 都 `textures.remove(key)` 再重建同名纹理，旧对象仍持有已销毁的帧 | 同名同尺寸时**复用**纹理（`clearRect` + 重绘 + `refresh`），不再 remove/create |
 | 26 | Boss 的动画帧数组越界（`pose.bob` of undefined） | `posesFor` 把**绝对帧号**当成姿态表下标用；Boss 帧数比姿态表少时采样越界 | 用「组内序号」采样并加 clamp + 兜底 `BASE` 姿态 |
 | 27 | 单位画得像「保龄球瓶」、投石车画成了人 | 第一版比例失衡（头小肩窄）、没有 archetype 概念 | 加大头/肩比例，引入 `archetype` 决定头饰与躯干；投石车改为真正的攻城器械绘制 |
+| 28 | 新加的「十关全解锁」看起来通过，其实 5 关走不到胜利 | `tests/campaign.mjs` 只强制计数器 + 手动摆位，**不盖建筑、不造兵**；`o2:建造兵营` 这类目标必然停在 `active` | 新写驱动型测试时，**先问「这条目标在游戏里由谁驱动，脚本有没有真的做那件事」**；`active` 与 `failed` 要分开看 —— `failed` 通常才是真 bug |
+| 29 | 自动化上线后，原 smoke 的建造/生产/遗物断言开始假失败 | ① `autoProduction` 会预留建造储备金 → 手动排产时钱「不够」；② `autoWorker` 会把工人从工地拉走；③ 本局随机 blessing 会让遗物加成**大于**原定值 | fixture 隔离：测试里先 `b.ai.camps = []; b.ai.nextWaveAt = 1e9`（隔离波次）、显式补钱，遗物断言改**下界**并保留逐条文案检查（不许直接删断言） |
 
 ---
 
@@ -276,7 +344,8 @@ git log --oneline
 # f4d4515 chore: refresh acceptance screenshots from the final verification run
 # f0b8f8e feat(phase1.2): live relic effects, formation/avoidance, real-GPU + responsive verification
 # 2ebd22a feat(phase1.3): fog of war, equipment/loot/talent loop, 5th music track
-# + 第四轮：战斗表现升级（单位动画 / 受击反馈 / 死亡演出 / 技能特效 / 环境动画 / 战斗信息 / 粒子池化）
+# e1d5dd3 feat(presentation): commercial-grade combat visuals（第四轮）
+# <WIP>   wip(singleplayer): automation / army groups / adventure layer / 10 missions — 目标链 5 关未通
 ```
 
 开工前先 `git status` 确认工作区干净。测试需要先起服务：`npm run dev &` 然后 `npm test`。

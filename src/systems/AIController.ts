@@ -239,10 +239,13 @@ export class AIController {
     }
     this.ctx.fx.explosion(camp.x, camp.y, 90, true, true);
     audio.sfx('bossRoar', 0.35);
+    this.wavesSent = this.waveIndex;
     this.onWave?.(this.waveIndex, count);
   }
 
   onWave: ((index: number, count: number) => void) | null = null;
+  /** waves that have been sent (used by "survive N waves" objectives) */
+  wavesSent = 0;
 
   missionRef: MissionDef | null = null;
 

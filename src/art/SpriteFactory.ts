@@ -969,6 +969,200 @@ function drawTree(scene: Phaser.Scene, key: string, variant: number): void {
   setMeta(key, 1 / SS, (size - 5) / size);
 }
 
+/** Treasure chest: banded wood with a gold lock and a glow. */
+function drawChest(scene: Phaser.Scene, key: string): void {
+  const size = 40;
+  const c = ctx2d(scene, key, size, size);
+  const cx = size / 2;
+  const by = size - 6;
+  c.save();
+  c.fillStyle = 'rgba(0,0,0,0.3)';
+  c.beginPath();
+  c.ellipse(cx, by, 13, 4.5, 0, 0, Math.PI * 2);
+  c.fill();
+  c.restore();
+  // body
+  c.save();
+  c.fillStyle = css(0x8a5f34);
+  c.beginPath();
+  c.moveTo(cx - 12, by - 11);
+  c.lineTo(cx + 12, by - 11);
+  c.lineTo(cx + 11, by);
+  c.lineTo(cx - 11, by);
+  c.closePath();
+  c.fill();
+  outline(c, 1.6);
+  c.restore();
+  // lid
+  c.save();
+  c.beginPath();
+  c.moveTo(cx - 13, by - 11);
+  c.quadraticCurveTo(cx, by - 22, cx + 13, by - 11);
+  c.closePath();
+  c.fillStyle = css(0x9c6d3c);
+  c.fill();
+  outline(c, 1.6);
+  c.restore();
+  // iron bands + lock
+  c.save();
+  c.fillStyle = css(0x4a4a52);
+  c.fillRect(cx - 8, by - 20, 3, 20);
+  c.fillRect(cx + 5, by - 20, 3, 20);
+  c.fillStyle = css(0xffd257);
+  c.fillRect(cx - 3, by - 13, 6, 7);
+  outline(c, 1.2);
+  c.restore();
+  // sparkle
+  c.save();
+  c.fillStyle = 'rgba(255,235,150,0.85)';
+  c.beginPath();
+  c.arc(cx + 9, by - 18, 1.8, 0, Math.PI * 2);
+  c.arc(cx - 11, by - 15, 1.3, 0, Math.PI * 2);
+  c.fill();
+  c.restore();
+  finish(scene, key, c);
+  setMeta(key, 1 / SS, (size - 6) / size);
+}
+
+/** Supply crate: smaller, plainer, no lock. */
+function drawCache(scene: Phaser.Scene, key: string): void {
+  const size = 32;
+  const c = ctx2d(scene, key, size, size);
+  const cx = size / 2;
+  const by = size - 6;
+  c.save();
+  c.fillStyle = 'rgba(0,0,0,0.28)';
+  c.beginPath();
+  c.ellipse(cx, by, 10, 3.4, 0, 0, Math.PI * 2);
+  c.fill();
+  c.restore();
+  c.save();
+  c.fillStyle = css(0x9a7b4a);
+  c.fillRect(cx - 9, by - 13, 18, 13);
+  outline(c, 1.5);
+  c.restore();
+  c.save();
+  c.strokeStyle = css(0x6b5330);
+  c.lineWidth = 1.6;
+  c.beginPath();
+  c.moveTo(cx - 9, by - 8);
+  c.lineTo(cx + 9, by - 8);
+  c.moveTo(cx, by - 13);
+  c.lineTo(cx, by);
+  c.stroke();
+  c.restore();
+  c.save();
+  c.fillStyle = css(0x7fd8ff, 0.9);
+  c.beginPath();
+  c.arc(cx, by - 10, 2, 0, Math.PI * 2);
+  c.fill();
+  c.restore();
+  finish(scene, key, c);
+  setMeta(key, 1 / SS, (size - 6) / size);
+}
+
+/** Quest NPC: robed scholar with a staff and a question mark above. */
+function drawNpc(scene: Phaser.Scene, key: string): void {
+  const W = 34;
+  const H = 46;
+  const c = ctx2d(scene, key, W, H);
+  const cx = W / 2;
+  const by = H - 5;
+  c.save();
+  c.fillStyle = 'rgba(0,0,0,0.28)';
+  c.beginPath();
+  c.ellipse(cx, by, 9, 3, 0, 0, Math.PI * 2);
+  c.fill();
+  c.restore();
+  // robe
+  c.save();
+  c.beginPath();
+  c.moveTo(cx, by - 26);
+  c.quadraticCurveTo(cx + 9, by - 14, cx + 8, by);
+  c.lineTo(cx - 8, by);
+  c.quadraticCurveTo(cx - 9, by - 14, cx, by - 26);
+  c.closePath();
+  c.fillStyle = css(0x6b5fa8);
+  c.fill();
+  outline(c, 1.5);
+  c.restore();
+  // hood
+  c.save();
+  c.beginPath();
+  c.arc(cx, by - 29, 6, Math.PI, Math.PI * 2);
+  c.closePath();
+  c.fillStyle = css(0x584c92);
+  c.fill();
+  outline(c, 1.4);
+  c.restore();
+  // staff
+  c.save();
+  c.strokeStyle = css(0x6b5334);
+  c.lineWidth = 2.2;
+  c.beginPath();
+  c.moveTo(cx + 8, by);
+  c.lineTo(cx + 10, by - 32);
+  c.stroke();
+  c.fillStyle = css(0xffd257);
+  c.beginPath();
+  c.arc(cx + 10, by - 34, 3, 0, Math.PI * 2);
+  c.fill();
+  c.restore();
+  // quest marker
+  c.save();
+  c.fillStyle = 'rgba(255,214,90,0.95)';
+  c.font = 'bold 15px "Trebuchet MS", sans-serif';
+  c.textAlign = 'center';
+  c.fillText('!', cx, by - 38);
+  c.restore();
+  finish(scene, key, c);
+  setMeta(key, 1 / SS, (by - 4) / H);
+}
+
+/** Void rift: a tear in the air with a glowing rim. */
+function drawRift(scene: Phaser.Scene, key: string): void {
+  const size = 44;
+  const c = ctx2d(scene, key, size, size);
+  const cx = size / 2;
+  const by = size - 8;
+  c.save();
+  c.fillStyle = 'rgba(0,0,0,0.3)';
+  c.beginPath();
+  c.ellipse(cx, by, 12, 4, 0, 0, Math.PI * 2);
+  c.fill();
+  c.restore();
+  // tear
+  c.save();
+  const g = c.createLinearGradient(cx, by - 34, cx, by - 4);
+  g.addColorStop(0, 'rgba(190,150,255,0.95)');
+  g.addColorStop(0.5, 'rgba(90,40,150,0.95)');
+  g.addColorStop(1, 'rgba(20,10,40,0.95)');
+  c.fillStyle = g;
+  c.beginPath();
+  c.moveTo(cx, by - 34);
+  c.quadraticCurveTo(cx + 10, by - 20, cx + 5, by - 5);
+  c.quadraticCurveTo(cx, by - 1, cx - 5, by - 5);
+  c.quadraticCurveTo(cx - 10, by - 20, cx, by - 34);
+  c.closePath();
+  c.fill();
+  c.strokeStyle = 'rgba(220,190,255,0.9)';
+  c.lineWidth = 1.6;
+  c.stroke();
+  c.restore();
+  // glow
+  c.save();
+  const glow = c.createRadialGradient(cx, by - 18, 2, cx, by - 18, 18);
+  glow.addColorStop(0, 'rgba(170,120,255,0.5)');
+  glow.addColorStop(1, 'rgba(120,80,220,0)');
+  c.fillStyle = glow;
+  c.beginPath();
+  c.arc(cx, by - 18, 18, 0, Math.PI * 2);
+  c.fill();
+  c.restore();
+  finish(scene, key, c);
+  setMeta(key, 1 / SS, (size - 8) / size);
+}
+
 /** Broken wall fragment — battlefield rubble that reads as "this place had a history". */
 function drawRuin(scene: Phaser.Scene, key: string): void {
   const size = 52;
@@ -1268,6 +1462,10 @@ export function ensureTextures(scene: Phaser.Scene): void {
   drawSlash(scene, 'fx_slash', 0xfff2c0);
   drawSlash(scene, 'fx_slash_dark', 0xff8a5a);
 
+  drawChest(scene, 'adv_chest');
+  drawCache(scene, 'adv_cache');
+  drawNpc(scene, 'adv_npc');
+  drawRift(scene, 'adv_rift');
   drawRuin(scene, 'decor_ruin');
   drawTorch(scene, 'decor_torch');
   drawBanner(scene, 'decor_banner');

@@ -22,6 +22,8 @@ export interface MatchModifiers {
   unitSpeed: number;
   /** extra gather rate for settlers */
   harvestRate: number;
+  /** multiplier on hero skill cooldowns (0.9 = 10% faster) — set by run blessings */
+  cooldownMul: number;
 }
 
 export function emptyModifiers(): MatchModifiers {
@@ -33,6 +35,7 @@ export function emptyModifiers(): MatchModifiers {
     heroDamage: 0,
     unitSpeed: 0,
     harvestRate: 0,
+    cooldownMul: 1,
   };
 }
 
@@ -83,5 +86,6 @@ export function describeModifiers(mods: MatchModifiers): string[] {
   if (mods.heroDamage) out.push(`英雄伤害 +${Math.round(mods.heroDamage * 100)}%`);
   if (mods.unitSpeed) out.push(`部队移动速度 +${Math.round(mods.unitSpeed * 100)}%`);
   if (mods.harvestRate) out.push(`采集速度 +${Math.round(mods.harvestRate * 100)}%`);
+  if (mods.cooldownMul !== 1) out.push(`技能冷却 ${Math.round((mods.cooldownMul - 1) * 100)}%`);
   return out;
 }

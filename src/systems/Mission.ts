@@ -12,6 +12,8 @@ export interface ObjectiveView {
   state: ObjectiveState;
   progress: number;
   total: number;
+  /** hidden objectives are not listed in the HUD until revealed */
+  hidden: boolean;
 }
 
 export interface MatchResult {
@@ -50,6 +52,7 @@ export class MissionSystem {
 
   onObjectiveDone: ((o: ObjectiveView) => void) | null = null;
   onObjectiveStart: ((o: ObjectiveView) => void) | null = null;
+  onObjectiveRevealed: ((o: ObjectiveView) => void) | null = null;
   onEnd: ((result: MatchResult) => void) | null = null;
 
   private cacheTimer = 0;
@@ -64,6 +67,7 @@ export class MissionSystem {
       state: i === 0 || def.optional ? 'active' : 'pending',
       progress: 0,
       total: this.totalOf(def),
+      hidden: !!def.hidden,
     }));
   }
 
@@ -74,6 +78,12 @@ export class MissionSystem {
       case 'produce':
         return def.target?.count ?? 1;
       case 'destroy':
+        return def.target?.count ?? 1;
+      case 'defend':
+        return def.target?.count ?? 1;
+      case 'escort':
+        return def.target?.count ?? 1;
+      case 'rescue':
         return def.target?.count ?? 1;
       case 'collect':
         return def.target?.count ?? 1;
@@ -99,8 +109,18 @@ export class MissionSystem {
     this.cacheTimer = 0;
 
     for (const o of this.objectives) {
-      if (o.state !== 'active') continue;
+      if (o.state !== 'active' || o.hidden) continue;
       this.checkObjective(o);
+    }
+
+    // hidden objectives become visible when their reveal condition is met
+    for (const o of this.objectives) {
+      if (!o.hidden) continue;
+      const ready = !o.def.revealAfter || this.objectives.find((x) => x.def.id === o.def.revealAfter)?.state === 'done';
+      if (ready) {
+        o.hidden = false;
+        this.onObjectiveRevealed?.(o);
+      }
     }
 
     // sequential main objectives: when the active one completes, start the next
@@ -169,12 +189,52 @@ export class MissionSystem {
       }
       case 'defend': {
         const id = o.def.target?.buildingId;
-        const target = world.buildings.find((b) => b.team === 1 && b.def.id === id);
-        const ok = !!target && !target.dead;
-        o.progress = ok ? 1 : 0;
-        if (!ok && id === 'castle') {
-          this.finish(false);
+        if (id) {
+          const target = world.buildings.find((b) => b.team === 1 && b.def.id === id);
+          const ok = !!target && !target.dead;
+          o.progress = ok ? o.total : 0;
+          if (!ok && id === 'castle') {
+            this.finish(false);
+            return;
+          }
+        } else if (o.def.target?.unitId) {
+          // "this unit must survive"
+          const alive = world.units.some((u) => !u.dead && u.def.id === o.def.target?.unitId);
+          o.progress = alive ? o.total : 0;
+        } else {
+          // survive N attack waves
+          o.progress = Math.min(o.total, this.wavesSurvived);
+        }
+        break;
+      }
+      case 'escort': {
+        const escort = world.units.find((u) => !u.dead && u.def.id === 'caravan');
+        if (!escort) {
+          o.state = 'failed';
           return;
+        }
+        const goal = world.map.landings[world.map.landings.length - 1] ?? world.map.playerStart;
+        const d = Math.hypot(escort.x - goal.x, escort.y - goal.y);
+        o.progress = d < 160 ? o.total : 0;
+        break;
+      }
+      case 'rescue': {
+        const prisoner = world.units.find((u) => !u.dead && u.def.id === 'prisoner');
+        if (!prisoner) {
+          o.state = 'failed';
+          return;
+        }
+        const hero = world.hero;
+        // freed once the hero reaches the prisoner, then it must reach the castle
+        if (!this.prisonerFreed && hero && !hero.dead && Math.hypot(hero.x - prisoner.x, hero.y - prisoner.y) < 90) {
+          this.prisonerFreed = true;
+          prisoner.faction = 'dawn' as never;
+          prisoner.team = 1;
+        }
+        if (this.prisonerFreed) {
+          const castle = world.buildings.find((b) => !b.dead && b.team === 1 && b.def.id === 'castle');
+          const home = castle ?? world.map.playerStart;
+          o.progress = Math.hypot(prisoner.x - home.x, prisoner.y - home.y) < 190 ? o.total : 0;
         }
         break;
       }
@@ -189,10 +249,7 @@ export class MissionSystem {
         o.progress = !vision || vision.isVisibleWorld(point.x, point.y) ? 1 : 0;
         break;
       }
-      case 'escort':
-      case 'rescue':
-        o.progress = 0;
-        break;
+
       default:
         break;
     }
@@ -204,6 +261,9 @@ export class MissionSystem {
   }
 
   bossSpawned = false;
+  /** enemy attack waves that have been survived (drives "hold out" objectives) */
+  wavesSurvived = 0;
+  private prisonerFreed = false;
 
   // ────────────────────────── event feeds ──────────────────────────
 

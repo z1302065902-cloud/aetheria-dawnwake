@@ -5,6 +5,7 @@ import { PAL, toCss } from '../art/Palette';
 import { Bar, Button, drawPanel, formatTime, text } from '../ui/UiKit';
 import { metaOf } from '../art/SpriteFactory';
 import { FOG_TEX } from '../systems/Vision';
+import { STANCE_LABEL, type Stance } from '../systems/ArmyGroups';
 import { BUILDINGS } from '../data/buildings';
 import { getUnit } from '../data/units';
 import { RESOURCE_COLOR, type ResourceId } from '../config/Constants';
@@ -64,6 +65,15 @@ export class HudScene extends Phaser.Scene {
   private objectiveTexts: Phaser.GameObjects.Text[] = [];
   private objectivePanelHeight = 0;
 
+  /** single-player control panel: workers, army groups, automation toggles */
+  private spRoot!: Phaser.GameObjects.Container;
+  private workerText!: Phaser.GameObjects.Text;
+  private workerButtons: Array<{ btn: Button; kind: 'gold' | 'wood' | 'mana' | 'minus' | 'plus' }> = [];
+  private armyTexts: Phaser.GameObjects.Text[] = [];
+  private armyButtons: Array<{ btn: Button; group: number }> = [];
+  private autoButtons: Array<{ btn: Button; key: 'autoWorker' | 'autoProduction' | 'autoAttack' | 'autoRally'; label: string }> = [];
+  private adventureText!: Phaser.GameObjects.Text;
+
   private bossRoot!: Phaser.GameObjects.Container;
   private bossName!: Phaser.GameObjects.Text;
   private bossPhase!: Phaser.GameObjects.Text;
@@ -102,6 +112,10 @@ export class HudScene extends Phaser.Scene {
     this.queueTexts = [];
     this.objectiveTexts = [];
     this.feedTexts = [];
+    this.workerButtons = [];
+    this.armyTexts = [];
+    this.armyButtons = [];
+    this.autoButtons = [];
     this.pauseButtons = [];
     this.resultButtons = [];
     this.volumeButtons = [];
@@ -191,6 +205,48 @@ export class HudScene extends Phaser.Scene {
     // objectives
     for (let i = 0; i < 9; i++) {
       this.objectiveTexts.push(text(this, 0, 0, '', 12, toCss(PAL.uiText), { origin: [0, 0] }));
+    }
+
+    // ── single-player panel (left side, above the bottom strip) ──
+    this.spRoot = this.add.container(0, 0).setDepth(280);
+    this.workerText = text(this, 0, 0, '', 12, toCss(PAL.uiText), { origin: [0, 0.5] });
+    this.adventureText = text(this, 0, 0, '', 12, toCss(0xc9a4ff), { origin: [0, 0.5] });
+    this.spRoot.add([this.workerText, this.adventureText]);
+    // worker mix buttons: -/+ per resource
+    const mixKinds: Array<{ kind: 'gold' | 'wood' | 'mana'; label: string }> = [
+      { kind: 'gold', label: '金币' },
+      { kind: 'wood', label: '木材' },
+      { kind: 'mana', label: '水晶' },
+    ];
+    for (const { kind, label } of mixKinds) {
+      const minus = new Button(this, 0, 0, 22, 22, '−', () => bus.emit('ui:worker-mix', { kind, delta: -1 }), { fontSize: 13 });
+      const plus = new Button(this, 0, 0, 22, 22, '+', () => bus.emit('ui:worker-mix', { kind, delta: 1 }), { fontSize: 13 });
+      this.spRoot.add([minus.rect, minus.label, plus.rect, plus.label]);
+      this.workerButtons.push({ btn: minus, kind });
+      this.workerButtons.push({ btn: plus, kind });
+      void label;
+    }
+    // army group rows: click a row to select, click the stance to cycle it
+    for (let i = 0; i < 3; i++) {
+      const t = text(this, 0, 0, '', 12, toCss(PAL.uiText), { origin: [0, 0.5] });
+      const b = new Button(this, 0, 0, 96, 22, '姿态', () => bus.emit('ui:army-stance-cycle', i + 1), { fontSize: 11 });
+      const sel = new Button(this, 0, 0, 26, 22, `${i + 1}`, () => bus.emit('ui:army-select', i + 1), { fontSize: 11 });
+      this.spRoot.add([t, b.rect, b.label, sel.rect, sel.label]);
+      this.armyTexts.push(t);
+      this.armyButtons.push({ btn: b, group: i + 1 });
+      this.armyButtons.push({ btn: sel, group: i + 1 });
+    }
+    // automation toggles
+    const autos: Array<{ key: 'autoWorker' | 'autoProduction' | 'autoAttack' | 'autoRally'; label: string }> = [
+      { key: 'autoWorker', label: '自动农民' },
+      { key: 'autoProduction', label: '自动生产' },
+      { key: 'autoAttack', label: '自动进攻' },
+      { key: 'autoRally', label: '自动集结' },
+    ];
+    for (const a of autos) {
+      const b = new Button(this, 0, 0, 84, 22, a.label, () => bus.emit('ui:automation-toggle', a.key), { fontSize: 11 });
+      this.spRoot.add([b.rect, b.label]);
+      this.autoButtons.push({ btn: b, key: a.key, label: a.label });
     }
 
     // boss bar (hidden until a boss is on the field)
@@ -355,6 +411,7 @@ export class HudScene extends Phaser.Scene {
     for (let i = 0; i < 4; i++) {
       const bx = abX + 14 * s + abStep * (i + 0.5);
       const by = abY + 46 * s;
+      if (!this.abilityButtons[i].isAlive()) continue;
       this.abilityButtons[i].setPosition(bx, by);
       this.abilityButtons[i].setSize(abBtn, abBtn);
       this.abilityButtons[i].rect.setSize(abBtn, abBtn);
@@ -401,6 +458,37 @@ export class HudScene extends Phaser.Scene {
     for (let i = 0; i < this.queueTexts.length; i++) {
       this.queueTexts[i].setPosition(cmdX + 14 * s, abY + 56 * s + i * 14 * s).setFontSize(11 * s);
     }
+
+    // ── single-player panel layout ──
+    const spW = Math.min(232 * s, this.W * 0.22);
+    const spX = 8 * s;
+    const spH = 176 * s;
+    const spY = bottomY - spH - 10 * s;
+    drawPanel(g, spX, spY, spW, spH, { header: true, alpha: 0.88 });
+    this.workerText.setPosition(spX + 8 * s, spY + 34 * s).setFontSize(12 * s);
+    let wbx = spX + 8 * s;
+    for (let i = 0; i < this.workerButtons.length; i++) {
+      const col = Math.floor(i / 2);
+      const isMinus = i % 2 === 0;
+      const bx = wbx + col * 74 * s + (isMinus ? 10 * s : 34 * s);
+      this.workerButtons[i].btn.setPosition(bx, spY + 58 * s).setSize(20 * s, 20 * s);
+      this.workerButtons[i].btn.label.setFontSize(13 * s);
+    }
+    for (let i = 0; i < this.armyTexts.length; i++) {
+      const y = spY + 84 * s + i * 26 * s;
+      this.armyTexts[i].setPosition(spX + 8 * s, y).setFontSize(12 * s);
+      this.armyButtons[i * 2].btn.setPosition(spX + spW - 78 * s, y).setSize(92 * s, 20 * s);
+      this.armyButtons[i * 2].btn.label.setFontSize(11 * s);
+      this.armyButtons[i * 2 + 1].btn.setPosition(spX + spW - 20 * s, y).setSize(24 * s, 20 * s);
+      this.armyButtons[i * 2 + 1].btn.label.setFontSize(11 * s);
+    }
+    for (let i = 0; i < this.autoButtons.length; i++) {
+      const bx = spX + 8 * s + (i % 2) * 108 * s;
+      const by = spY + spH - 46 * s + Math.floor(i / 2) * 22 * s;
+      this.autoButtons[i].btn.setPosition(bx + 42 * s, by).setSize(84 * s, 20 * s);
+      this.autoButtons[i].btn.label.setFontSize(11 * s);
+    }
+    this.adventureText.setPosition(spX + 8 * s, spY + spH - 8 * s).setFontSize(11 * s);
 
     // boss bar: centred, above the objectives panel line
     const bossW = Math.min(560 * s, this.W * 0.46);
@@ -774,6 +862,24 @@ export class HudScene extends Phaser.Scene {
       (viewW / mapW) * mmBounds.width,
       (viewH / mapH) * mmBounds.height,
     );
+
+    // ── single-player panel ──
+    const wk = st.workers;
+    this.workerText.setText(
+      `工人 ${wk.total}　金 ${wk.assigned.gold} / 木 ${wk.assigned.wood} / 晶 ${wk.assigned.mana}${wk.assigned.idle ? `　闲置 ${wk.assigned.idle}` : ''}${wk.assigned.building ? `　建造 ${wk.assigned.building}` : ''}\n配比  金 ${wk.mix.gold} · 木 ${wk.mix.wood} · 晶 ${wk.mix.mana}（点 −/+ 调整，自动重新分配）`,
+    );
+    for (let i = 0; i < this.armyTexts.length; i++) {
+      const g = st.armies[i];
+      this.armyTexts[i].setText(g ? `${g.id} ${g.name} ${g.count}` : '');
+      const stanceBtn = this.armyButtons[i * 2].btn;
+      stanceBtn.setLabel(g ? STANCE_LABEL[g.stance as Stance] ?? g.stance : '—');
+    }
+    for (const a of this.autoButtons) {
+      const on = wk[a.key];
+      a.btn.setLabel(`${on ? '✔' : '✘'} ${a.label}`);
+      a.btn.setSubColor(on ? toCss(0x9fffb0) : toCss(PAL.uiDim));
+    }
+    this.adventureText.setText(`冒险：已发现 ${st.adventure.found}　剩余 ${st.adventure.remaining}　${st.adventure.blessing}`);
 
     // boss bar
     if (st.boss) {

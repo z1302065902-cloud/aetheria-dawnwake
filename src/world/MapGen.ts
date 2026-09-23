@@ -226,6 +226,83 @@ export function generateMap(opt: GenOptions): GeneratedMap {
   return map;
 }
 
+/**
+ * Builds any mission's map from its MapDef + enemy camp list, so all ten campaign missions
+ * are playable without hand-authoring nine more layouts. Layout rules are shared; the biome
+ * changes density, palette and how much of the map is forest/rock.
+ */
+export function generateMapForMission(mission: {
+  map: { biome: 'valley' | 'forest' | 'fortress'; seed: number; size: { w: number; h: number } };
+  enemyCamps: Array<{ x: number; y: number; kind: string; strength: number }>;
+  objectives: Array<{ kind: string; target?: { tag?: string; count?: number; buildingId?: string } }>;
+  index: number;
+  hero: string;
+}): GeneratedMap {
+  const rng = new Rng(mission.map.seed + mission.index * 977);
+  const playerStart = { tx: 10 + (mission.index % 3) * 2, ty: 11 + (mission.index % 4) * 2 };
+  const camps = mission.enemyCamps.map((c) => ({ x: c.x, y: c.y, kind: c.kind as 'wildborn' | 'voidborn', strength: c.strength }));
+
+  // resource ring around the player start + contested nodes near each camp
+  const goldMines: Array<{ x: number; y: number; amount: number }> = [];
+  const groves: Array<{ x: number; y: number; amount: number }> = [];
+  for (let i = 0; i < 3; i++) {
+    const a = rng.range(0, Math.PI * 2);
+    const r = rng.range(6, 11);
+    goldMines.push({ x: Math.round(playerStart.tx + Math.cos(a) * r), y: Math.round(playerStart.ty + Math.sin(a) * r), amount: 2400 + i * 200 });
+  }
+  for (let i = 0; i < 4; i++) {
+    const a = rng.range(0, Math.PI * 2);
+    const r = rng.range(7, 14);
+    groves.push({ x: Math.round(playerStart.tx + Math.cos(a) * r), y: Math.round(playerStart.ty + Math.sin(a) * r), amount: 2000 + i * 150 });
+  }
+  for (const c of camps) {
+    goldMines.push({ x: Math.max(3, c.x - 6), y: Math.max(3, c.y - 5), amount: 3000 });
+    groves.push({ x: Math.min(MAP_W - 4, c.x + 6), y: Math.min(MAP_H - 4, c.y + 5), amount: 2200 });
+    goldMines.push({ x: Math.max(3, c.x + 4), y: Math.min(MAP_H - 4, c.y + 7), amount: 2600 });
+  }
+  // a contested mine + shrine in the middle
+  goldMines.push({ x: Math.round(MAP_W / 2) + 4, y: Math.round(MAP_H / 2) - 6, amount: 3400 });
+  const shrines = [{ x: Math.round(MAP_W / 2), y: Math.round(MAP_H / 2) + 2 }];
+  // the map must provide at least as many shrines as a "capture N shrines" objective needs
+  const shrineNeed = mission.objectives.reduce(
+    (acc, o) => (o.kind === 'collect' && o.target?.tag === 'neutral_shrine' ? Math.max(acc, o.target.count ?? 1) : acc),
+    1,
+  );
+  while (shrines.length < shrineNeed) {
+    const i = shrines.length;
+    const a = (i / shrineNeed) * Math.PI * 2 + 0.8;
+    shrines.push({ x: Math.round(MAP_W / 2 + Math.cos(a) * 16), y: Math.round(MAP_H / 2 + Math.sin(a) * 16) });
+  }
+
+  // neutral wildlife between the base and the camps (hero hunting grounds)
+  const monsters: MonsterSpec[] = [];
+  const kinds = mission.map.biome === 'forest' ? ['direwolf', 'direwolf', 'shaman'] : mission.map.biome === 'fortress' ? ['shade', 'direwolf', 'shade'] : ['direwolf', 'raider', 'direwolf'];
+  for (let i = 0; i < 5 + mission.index; i++) {
+    const a = rng.range(0, Math.PI * 2);
+    const r = rng.range(14, 26);
+    monsters.push({ unitId: kinds[i % kinds.length], x: Math.round(playerStart.tx + Math.cos(a) * r), y: Math.round(playerStart.ty + Math.sin(a) * r) });
+  }
+  const searchPoints = [
+    { x: Math.max(4, playerStart.tx + 8), y: Math.min(MAP_H - 5, playerStart.ty + 30), name: 'ancient-standing-stones' },
+    { x: Math.min(MAP_W - 6, playerStart.tx + 26), y: Math.max(5, playerStart.ty - 6), name: 'buried-shrine' },
+  ];
+
+  const map = generateMap({
+    seed: mission.map.seed + mission.index * 31,
+    biome: mission.map.biome,
+    playerStart,
+    camps,
+    goldMines,
+    groves,
+    shrines,
+    monsters,
+    searchPoints,
+    riverX: mission.map.biome === 'valley' ? 36 : mission.map.biome === 'forest' ? 30 : 42,
+    bridgeYs: [16 + (mission.index % 3) * 4, 44 + (mission.index % 2) * 4],
+  });
+  return map;
+}
+
 /** Phase-1 layout: Green Valley. */
 export function buildGreenValley(): GeneratedMap {
   return generateMap({

@@ -147,6 +147,28 @@ export class VisionGrid {
     if (changed) this.version++;
   }
 
+  /** Permanently reveals an area (NPC hints, scripted discoveries). */
+  revealArea(x: number, y: number, radius: number): void {
+    const r = Math.ceil(radius / TILE);
+    const ctx = Math.floor(x / TILE);
+    const cty = Math.floor(y / TILE);
+    const r2 = radius * radius;
+    let changed = false;
+    for (let ty = Math.max(0, cty - r); ty <= Math.min(this.h - 1, cty + r); ty++) {
+      const dy = ty * TILE + TILE / 2 - y;
+      for (let tx = Math.max(0, ctx - r); tx <= Math.min(this.w - 1, ctx + r); tx++) {
+        const dx = tx * TILE + TILE / 2 - x;
+        if (dx * dx + dy * dy > r2) continue;
+        const i = ty * this.w + tx;
+        if (this.explored[i] !== 1) {
+          this.explored[i] = 1;
+          changed = true;
+        }
+      }
+    }
+    if (changed) this.version++;
+  }
+
   /** Writes the current mask into the shared canvas texture (only when it changed). */
   paint(): void {
     if (!this.canvasTex || !this.imageData || this.paintedVersion === this.version) return;

@@ -1080,8 +1080,16 @@ export function drawQuadruped(
   const body = spec.body;
   const trim = spec.trim;
   const accent = spec.accent;
+  const boss = spec.scale >= 1.8;
+
+  if (pose.down >= 0.5) {
+    drawBeastLying(ctx, cx, by, spec, facing);
+    return;
+  }
+
   const bodyR = 15 * s;
-  const cy = by - 15 * s - pose.bob;
+  const cy = by - 16 * s - pose.bob;
+  const lunge = pose.lunge * 10 * s * facing;
 
   ctx.save();
   if (pose.fall > 0) {
@@ -1096,123 +1104,253 @@ export function drawQuadruped(
   ctx.save();
   ctx.fillStyle = 'rgba(0,0,0,0.30)';
   ctx.beginPath();
-  ctx.ellipse(cx, by - 1.5, bodyR * 1.05, bodyR * 0.42, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx + lunge * 0.3, by - 1.5, bodyR * 1.1, bodyR * 0.44, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
 
-  const lunge = pose.lunge * 10 * s * facing;
+  // ── legs: shoulder -> elbow -> paw, two joints per leg ──
+  const legAt = (hx: number, phase: number, shadeAmt: number) => {
+    const upper = Math.sin(phase) * 0.5;
+    const lower = Math.cos(phase) * 0.35;
+    const kneeX = hx + Math.sin(upper) * 7 * s * facing;
+    const kneeY = cy + bodyR * 0.42;
+    const footX = kneeX + Math.sin(upper + lower) * 5 * s * facing;
+    tapered(ctx, hx, kneeY - 3 * s, kneeX, kneeY, 6.4 * s, 4.6 * s, shade(body, shadeAmt));
+    tapered(ctx, kneeX, kneeY, footX, by - 2.6 * s, 4.6 * s, 3.2 * s, shade(body, shadeAmt - 0.08));
+    blob(ctx, footX, by - 2.2 * s, 3.6 * s, 2 * s, 0, shade(0x2b2b30, 0.06), 1, 1.2);
+    return { kneeX, kneeY, footX };
+  };
+  // far pair first (darker + behind)
+  legAt(cx - bodyR * 0.66 + lunge, pose.legUpperR + 0.6, -0.34);
+  legAt(cx + bodyR * 0.62 + lunge, pose.legUpperL + 0.6, -0.3);
 
-  // far legs
-  const legPairs: Array<[number, number, number]> = [
-    [-bodyR * 0.7, pose.legUpperR, -0.24],
-    [bodyR * 0.7, pose.legUpperL, -0.16],
-    [-bodyR * 0.62, pose.legUpperL, 0.16],
-    [bodyR * 0.62, pose.legUpperR, 0.24],
-  ];
-  legPairs.forEach(([dx, a, shadeAmt], i) => {
-    const isFar = i < 2;
-    const hx = cx + dx + lunge;
-    const kneeX = hx + Math.sin(a) * 7 * s * facing;
-    const kneeY = cy + bodyR * 0.5;
-    const footX = kneeX + Math.sin(a * 0.4) * 5 * s * facing;
-    tapered(ctx, hx, kneeY, footX, by - 2 * s, 5.4 * s, 3.6 * s, shade(body, isFar ? shadeAmt - 0.18 : shadeAmt));
-    blob(ctx, footX, by - 2 * s, 3.2 * s, 1.8 * s, 0, shade(trim, -0.2), 1, 1.1);
-  });
-
-  // tail
+  // tail: swings opposite the body bob
   ctx.save();
-  ctx.strokeStyle = css(shade(body, -0.14));
-  ctx.lineWidth = 3.6 * s;
+  const tailSwing = Math.sin(pose.legUpperL * 2) * 0.35;
+  ctx.strokeStyle = css(shade(body, -0.16));
+  ctx.lineWidth = 4.2 * s;
+  ctx.lineCap = 'round';
   ctx.beginPath();
-  ctx.moveTo(cx - bodyR * 0.85, cy + 1 * s);
-  ctx.quadraticCurveTo(cx - bodyR * 1.7, cy - 4 * s, cx - bodyR * 1.9 + pose.bob, cy - 13 * s);
+  ctx.moveTo(cx - bodyR * 0.86 + lunge * 0.4, cy + 1 * s);
+  ctx.quadraticCurveTo(
+    cx - bodyR * 1.7,
+    cy - 4 * s + tailSwing * 10 * s,
+    cx - bodyR * 2.05 + tailSwing * 6 * s,
+    cy - 14 * s + pose.bob,
+  );
   ctx.stroke();
-  ctx.restore();
-
-  // body
-  ctx.save();
-  ctx.beginPath();
-  ctx.ellipse(cx + lunge * 0.5, cy, bodyR, bodyR * 0.76, 0, 0, Math.PI * 2);
-  ctx.fillStyle = metal(ctx, body, cx - bodyR, cy - bodyR, bodyR * 2, bodyR * 1.6);
-  ctx.fill();
-  stroke(ctx, 2);
-  ctx.restore();
-
-  // fur shading + ribs
-  ctx.save();
-  ctx.strokeStyle = css(shade(body, -0.3), 0.6);
-  ctx.lineWidth = 1.2 * s;
-  for (let i = -1; i <= 1; i++) {
+  if (boss) {
+    // spiked tail tip
+    ctx.fillStyle = css(trim);
     ctx.beginPath();
-    ctx.moveTo(cx + i * bodyR * 0.34 + lunge * 0.5, cy - bodyR * 0.5);
-    ctx.quadraticCurveTo(cx + i * bodyR * 0.34 + 3 * s + lunge * 0.5, cy, cx + i * bodyR * 0.34 + lunge * 0.5, cy + bodyR * 0.5);
-    ctx.stroke();
-  }
-  ctx.restore();
-
-  // spikes
-  ctx.save();
-  ctx.fillStyle = css(trim);
-  for (let i = -2; i <= 2; i++) {
-    const sx = cx + i * bodyR * 0.34 + lunge * 0.5;
-    ctx.beginPath();
-    ctx.moveTo(sx - 3.6 * s, cy - bodyR * 0.52);
-    ctx.lineTo(sx, cy - bodyR * (0.95 + Math.abs(i) * 0.04));
-    ctx.lineTo(sx + 3.6 * s, cy - bodyR * 0.52);
+    ctx.moveTo(cx - bodyR * 2.05 + tailSwing * 6 * s, cy - 14 * s);
+    ctx.lineTo(cx - bodyR * 2.5 + tailSwing * 6 * s, cy - 20 * s);
+    ctx.lineTo(cx - bodyR * 1.75 + tailSwing * 6 * s, cy - 21 * s);
     ctx.closePath();
     ctx.fill();
     stroke(ctx, 1.2);
   }
   ctx.restore();
 
-  // head (lunge pushes it forward)
-  const headX = cx + bodyR * 1.0 + lunge * 1.5;
-  const headY = cy - 3 * s + pose.headTilt * 6 * s;
+  // ── body: shoulder hump + haunch, not a plain ellipse ──
   ctx.save();
   ctx.beginPath();
-  ctx.ellipse(headX, headY, 9.4 * s, 8 * s, 0.1, 0, Math.PI * 2);
-  ctx.fillStyle = metal(ctx, shade(body, 0.08), headX - 9 * s, headY - 8 * s, 18 * s, 16 * s);
+  ctx.moveTo(cx - bodyR * 0.9 + lunge * 0.5, cy + bodyR * 0.35);
+  ctx.quadraticCurveTo(cx - bodyR * 0.6 + lunge * 0.5, cy - bodyR * 0.95, cx + bodyR * 0.15 + lunge * 0.6, cy - bodyR * 0.86);
+  ctx.quadraticCurveTo(cx + bodyR * 0.85 + lunge * 0.7, cy - bodyR * 0.8, cx + bodyR * 1.02 + lunge * 0.8, cy - bodyR * 0.05);
+  ctx.quadraticCurveTo(cx + bodyR * 0.8 + lunge * 0.7, cy + bodyR * 0.72, cx + lunge * 0.5, cy + bodyR * 0.78);
+  ctx.quadraticCurveTo(cx - bodyR * 0.7 + lunge * 0.5, cy + bodyR * 0.72, cx - bodyR * 0.9 + lunge * 0.5, cy + bodyR * 0.35);
+  ctx.closePath();
+  ctx.fillStyle = metal(ctx, body, cx - bodyR, cy - bodyR, bodyR * 2, bodyR * 1.7);
+  ctx.fill();
+  stroke(ctx, 2);
+  ctx.restore();
+
+  // fur strokes along the flank
+  ctx.save();
+  ctx.strokeStyle = css(shade(body, -0.28), 0.5);
+  ctx.lineWidth = 1.1 * s;
+  for (let i = -2; i <= 2; i++) {
+    const fx = cx + i * bodyR * 0.32 + lunge * 0.5;
+    ctx.beginPath();
+    ctx.moveTo(fx, cy - bodyR * 0.42);
+    ctx.quadraticCurveTo(fx + 2.4 * s, cy + 1 * s, fx - 1 * s, cy + bodyR * 0.5);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // back spikes / dorsal plates
+  ctx.save();
+  ctx.fillStyle = css(trim);
+  const spikes = boss ? 6 : 5;
+  for (let i = 0; i < spikes; i++) {
+    const t = i / (spikes - 1);
+    const sx = cx + (t - 0.5) * bodyR * 1.7 + lunge * 0.6;
+    const sy = cy - bodyR * (0.78 + Math.sin(t * Math.PI) * 0.22);
+    const hgt = (boss ? 11 : 8) * s * (0.6 + Math.sin(t * Math.PI) * 0.7);
+    ctx.beginPath();
+    ctx.moveTo(sx - 4 * s, sy);
+    ctx.lineTo(sx + 0.6 * s, sy - hgt);
+    ctx.lineTo(sx + 4.4 * s, sy);
+    ctx.closePath();
+    ctx.fill();
+    stroke(ctx, 1.2);
+  }
+  ctx.restore();
+
+  // ── neck + head (lunge throws the head forward) ──
+  const headX = cx + bodyR * 1.05 + lunge * 1.5;
+  const headY = cy - bodyR * 0.35 + pose.headTilt * 8 * s;
+  ctx.save();
+  tapered(ctx, cx + bodyR * 0.72 + lunge * 1.1, cy - bodyR * 0.55, headX, headY + 2 * s, 9 * s, 8 * s, shade(body, 0.04));
+  ctx.restore();
+
+  // skull
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(headX - 8 * s, headY - 4 * s);
+  ctx.quadraticCurveTo(headX + 3 * s, headY - 10 * s, headX + 9 * s, headY - 4 * s);
+  ctx.quadraticCurveTo(headX + 12 * s, headY + 1 * s, headX + 8 * s, headY + 5 * s);
+  ctx.quadraticCurveTo(headX, headY + 8 * s, headX - 8 * s, headY + 4 * s);
+  ctx.closePath();
+  ctx.fillStyle = metal(ctx, shade(body, 0.1), headX - 8 * s, headY - 10 * s, 20 * s, 18 * s);
   ctx.fill();
   stroke(ctx, 1.8);
   ctx.restore();
-  // muzzle
-  tapered(ctx, headX + 4 * s, headY + 2 * s, headX + 11 * s, headY + 4 * s, 7 * s, 5 * s, shade(body, -0.04));
-  // tusks
+
+  // jaw + teeth
   ctx.save();
-  ctx.fillStyle = css(0xe8e2cc);
-  for (const dir of [-1, 1] as const) {
-    ctx.beginPath();
-    ctx.moveTo(headX + 8 * s, headY + 2 * s + dir * 3 * s);
-    ctx.lineTo(headX + 14 * s, headY + 6 * s + dir * 4 * s);
-    ctx.lineTo(headX + 8.6 * s, headY + 7 * s + dir * 4 * s);
-    ctx.closePath();
-    ctx.fill();
-    stroke(ctx, 1.1);
-  }
-  ctx.restore();
-  // ears
-  ctx.save();
-  ctx.fillStyle = css(shade(body, -0.1));
+  ctx.fillStyle = css(shade(body, -0.22));
   ctx.beginPath();
-  ctx.moveTo(headX - 5 * s, headY - 7 * s);
-  ctx.lineTo(headX - 8 * s, headY - 14 * s);
-  ctx.lineTo(headX - 1 * s, headY - 8.5 * s);
+  ctx.moveTo(headX + 2 * s, headY + 3 * s);
+  ctx.quadraticCurveTo(headX + 10 * s, headY + 5 * s, headX + 12 * s, headY + 1 * s);
+  ctx.lineTo(headX + 2 * s, headY + 6.5 * s);
   ctx.closePath();
   ctx.fill();
   stroke(ctx, 1.2);
   ctx.restore();
-  // glowing eyes
   ctx.save();
-  ctx.shadowColor = css(accent, 0.9);
-  ctx.shadowBlur = 6 * s;
-  ctx.fillStyle = css(accent);
-  for (const dir of [-1, 1] as const) {
+  ctx.fillStyle = css(0xf0ead2);
+  const jawOpen = pose.lunge > 0.1 ? 2.4 * s : 0;
+  for (let i = 0; i < 3; i++) {
+    const tx0 = headX + (5 + i * 2.4) * s;
     ctx.beginPath();
-    ctx.arc(headX + 4 * s, headY - 3 * s + dir * 3 * s, 1.9 * s, 0, Math.PI * 2);
+    ctx.moveTo(tx0, headY + 2 * s);
+    ctx.lineTo(tx0 + 1.4 * s, headY + (5.5 + jawOpen) * s);
+    ctx.lineTo(tx0 + 2.6 * s, headY + 2 * s);
+    ctx.closePath();
     ctx.fill();
   }
   ctx.restore();
 
+  // horns (bosses and big beasts)
+  if (boss) {
+    ctx.save();
+    ctx.strokeStyle = css(0xd9cba6);
+    ctx.lineWidth = 3.4 * s;
+    ctx.lineCap = 'round';
+    for (const d of [-1, 1] as const) {
+      ctx.beginPath();
+      ctx.moveTo(headX - 4 * s, headY - 5 * s);
+      ctx.quadraticCurveTo(headX - 9 * s, headY - 12 * s, headX - 3 * s, headY - (14 + d * 2) * s);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // ears
+  ctx.save();
+  ctx.fillStyle = css(shade(body, -0.12));
+  ctx.beginPath();
+  ctx.moveTo(headX - 6 * s, headY - 7 * s);
+  ctx.lineTo(headX - 10 * s, headY - 15 * s);
+  ctx.lineTo(headX - 1 * s, headY - 9 * s);
+  ctx.closePath();
+  ctx.fill();
+  stroke(ctx, 1.2);
+  ctx.restore();
+
+  // mane behind the skull
+  ctx.save();
+  ctx.fillStyle = css(shade(trim, 0.04));
+  for (let i = 0; i < 4; i++) {
+    const mx = headX - (5 + i * 3) * s;
+    const my = headY - (5 + i * 1.2) * s;
+    ctx.beginPath();
+    ctx.moveTo(mx, my);
+    ctx.lineTo(mx - 4 * s, my - 5 * s);
+    ctx.lineTo(mx + 1 * s, my - 1 * s);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // glowing eyes
+  ctx.save();
+  ctx.shadowColor = css(accent, 0.9);
+  ctx.shadowBlur = 7 * s;
+  ctx.fillStyle = css(accent);
+  for (const d of [-1, 1] as const) {
+    ctx.beginPath();
+    ctx.arc(headX + 3.4 * s, headY - 1 * s + d * 3 * s, 2 * s, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // near legs on top of the body
+  legAt(cx - bodyR * 0.5 + lunge, pose.legUpperL, -0.06);
+  legAt(cx + bodyR * 0.5 + lunge, pose.legUpperR, -0.02);
+
+  ctx.restore();
+}
+
+/** Quadruped lying on its side (dedicated death frame). */
+function drawBeastLying(ctx: CanvasRenderingContext2D, cx: number, by: number, spec: ArtSpec, facing: number): void {
+  const s = spec.scale;
+  const body = spec.body;
+  const gy = by - 5 * s;
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,0.26)';
+  ctx.beginPath();
+  ctx.ellipse(cx, gy + 3 * s, 22 * s, 7 * s, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  // body on its side
+  ctx.save();
+  ctx.beginPath();
+  ctx.ellipse(cx, gy, 15 * s, 6.4 * s, 0.06 * facing, 0, Math.PI * 2);
+  ctx.fillStyle = css(shade(body, -0.12));
+  ctx.fill();
+  stroke(ctx, 1.8);
+  ctx.restore();
+  // legs sticking out
+  for (const [dx, a] of [[-8, -0.5], [-2, -0.2], [5, 0.25], [11, 0.5]] as const) {
+    tapered(ctx, cx + dx * s, gy - 2 * s, cx + (dx + a * 6) * s, gy - 11 * s, 5 * s, 3.4 * s, shade(body, -0.24));
+  }
+  // head + jaw on the ground
+  const hx = cx + 19 * s * facing;
+  ctx.save();
+  ctx.beginPath();
+  ctx.ellipse(hx, gy - 1 * s, 8 * s, 5.6 * s, 0.3 * facing, 0, Math.PI * 2);
+  ctx.fillStyle = css(shade(body, 0.04));
+  ctx.fill();
+  stroke(ctx, 1.6);
+  ctx.restore();
+  ctx.save();
+  ctx.fillStyle = css(shade(body, -0.3));
+  ctx.beginPath();
+  ctx.moveTo(hx + 2 * s, gy + 1 * s);
+  ctx.lineTo(hx + 10 * s * facing, gy + 3 * s);
+  ctx.lineTo(hx + 2 * s, gy + 4 * s);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+  // blood pool
+  ctx.save();
+  ctx.fillStyle = 'rgba(118,24,24,0.32)';
+  ctx.beginPath();
+  ctx.ellipse(hx - 6 * s, gy + 4 * s, 12 * s, 5 * s, 0, 0, Math.PI * 2);
+  ctx.fill();
   ctx.restore();
 }
 

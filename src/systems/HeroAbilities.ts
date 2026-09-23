@@ -76,7 +76,8 @@ export class HeroAbilities {
     }
 
     hero.mana -= skill.manaCost;
-    hero.cooldowns[skillId] = skill.cooldown;
+    // run blessings can shorten cooldowns (Roguelite)
+    hero.cooldowns[skillId] = skill.cooldown * (this.ctx.world.mods.cooldownMul || 1);
     // Relic: Hero — amplify every skill the hero casts
     const dmgMul = (1 + hero.equipment.skillDamage / 100) * hero.skillDamageMul * (1 + this.ctx.world.mods.heroDamage);
     const dmg = skill.damage * dmgMul;

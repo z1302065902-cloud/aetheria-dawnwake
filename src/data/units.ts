@@ -95,6 +95,24 @@ export const UNITS: Record<string, UnitDef> = {
     desc: '攻城单位，对建筑造成巨额伤害，射速极慢。',
   }),
 
+  // ───────────────────────── Neutral / mission objects ─────────────────────────
+  caravan: unit({
+    id: 'caravan', name: '补给车', enName: 'Supply Caravan', faction: 'dawn', role: 'worker',
+    hp: 420, attack: 0, armor: 4, armorType: 'fortified',
+    moveSpeed: 62, attackRange: 0, attackCooldown: 3,
+    cost: {}, pop: 0, buildTime: 0, radius: 14, sightRange: 320, xp: 0,
+    art: { archetype: 'siege', shape: 'humanoid', body: 0xa88a5a, trim: 0x6b5334, accent: 0xffd257, scale: 0.9, weapon: 'engine' },
+    desc: '需要护送的补给车。它自己不会战斗。',
+  }),
+  prisoner: unit({
+    id: 'prisoner', name: '被囚的骑士', enName: 'Captive Knight', faction: 'wildborn', role: 'melee',
+    hp: 260, attack: 8, armor: 3, armorType: 'medium',
+    moveSpeed: 92, attackRange: 24, attackCooldown: 1.4,
+    cost: {}, pop: 0, buildTime: 0, radius: 11, sightRange: 300, xp: 0,
+    art: { archetype: 'knight', shape: 'humanoid', body: 0x8a8fa0, trim: 0x5a5f70, accent: 0xd9c9a0, scale: 0.95, weapon: 'sword' },
+    desc: '被荒野氏族囚禁的骑士。把他救出来。',
+  }),
+
   // ───────────────────────── Wildborn Clans ─────────────────────────
   raider: unit({
     id: 'raider', name: '荒野劫掠者', enName: 'Wildborn Raider', faction: 'wildborn', role: 'melee',

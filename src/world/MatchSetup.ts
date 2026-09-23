@@ -48,6 +48,17 @@ export function setupMatch(world: World, mission: MissionDef): MatchSetupResult 
   }
 
   // ── enemy encampments ──
+  // The camp composition must satisfy the mission's destroy objectives, otherwise an
+  // objective like "destroy 3 tents" can be impossible to complete.
+  const need: Record<string, number> = {};
+  for (const o of mission.objectives) {
+    if (o.kind === 'destroy' && o.target?.buildingId) {
+      need[o.target.buildingId] = Math.max(need[o.target.buildingId] ?? 0, o.target.count ?? 1);
+    }
+  }
+  const perCamp = (id: string) => Math.max(1, Math.ceil((need[id] ?? 0) / Math.max(1, world.map.camps.length)));
+  const tentsPerCamp = Math.max(2, perCamp('wb_tent'));
+  const altarsPerCamp = Math.max(1, perCamp('vb_altar'));
   const enemyBuildings: Building[] = [];
   for (const camp of world.map.camps) {
     const cx = camp.x * TILE + TILE / 2;
@@ -56,11 +67,16 @@ export function setupMatch(world: World, mission: MissionDef): MatchSetupResult 
     const main = world.spawnBuilding('wb_camp', cx, cy, faction);
     enemyBuildings.push(main);
     const layout: Array<[string, number, number]> = [
-      ['wb_tent', -130, -80],
-      ['wb_tent', 120, -95],
       ['wb_totem', -105, 100],
       ['wb_pen', 115, 105],
     ];
+    for (let i = 0; i < tentsPerCamp; i++) {
+      const a = (i / tentsPerCamp) * Math.PI - Math.PI * 0.85;
+      layout.push(['wb_tent', Math.round(Math.cos(a) * 150), Math.round(Math.sin(a) * 110) - 60]);
+    }
+    for (let i = 0; i < altarsPerCamp; i++) {
+      layout.push(['vb_altar', -200 - i * 70, 40 + i * 60]);
+    }
     for (const [def, ox, oy] of layout) {
       const tx = Math.floor((cx + ox) / TILE);
       const ty = Math.floor((cy + oy) / TILE);
@@ -70,10 +86,7 @@ export function setupMatch(world: World, mission: MissionDef): MatchSetupResult 
       const b = world.spawnBuilding(def, p.x, p.y, faction);
       enemyBuildings.push(b);
     }
-    if (camp.strength >= 5) {
-      const b = world.spawnBuilding('vb_altar', cx - 190, cy + 40, FACTION.VOIDBORN as any);
-      enemyBuildings.push(b);
-    }
+
   }
 
   world.wallet.gold = mission.startResources.gold ?? 0;

@@ -118,8 +118,24 @@ export class MovementSystem {
    * frame (mass weighted, capped, never pushed into a blocked tile). A weak soft push is
    * not enough — 20 units funnelling through a bridge would otherwise end up stacked.
    */
+  /**
+   * True when the unit is in a narrow passage (blocked on both sides), in which case
+   * sideways shoving is what jams a column — units must queue along the corridor instead.
+   */
+  private inCorridor(u: Unit): boolean {
+    const { path } = this.ctx;
+    const tx = Math.floor(u.x / TILE);
+    const ty = Math.floor(u.y / TILE);
+    const left = path.isFree(tx - 1, ty);
+    const right = path.isFree(tx + 1, ty);
+    const up = path.isFree(tx, ty - 1);
+    const down = path.isFree(tx, ty + 1);
+    return (!left && !right && (up || down)) || (!up && !down && (left || right));
+  }
+
   private accumulateSeparation(u: Unit): void {
     const { world } = this.ctx;
+    const narrow = this.inCorridor(u);
     const reach = u.radius + 46;
     world.hashUnits.forEachNear(u.x, u.y, reach, (o) => {
       if (o.dead || o === u || o.id < u.id) return; // each pair is relaxed once
@@ -145,6 +161,23 @@ export class MovementSystem {
       const uShare = o.radius / total;
       const oShare = u.radius / total;
       const corr = Math.min(overlap, 3) * 2;
+      // In a corridor only allow correction ALONG the passage; pushing sideways is what
+      // wedges a column into the walls. The unit that is further along keeps priority.
+      if (narrow) {
+        const ax = Math.abs(nx) > Math.abs(ny) ? 0 : nx; // lateral component only
+        const ay = Math.abs(ny) >= Math.abs(nx) ? 0 : ny;
+        u.pushX -= ax * corr * uShare * 0.5;
+        u.pushY -= ay * corr * uShare * 0.5;
+        o.pushX += ax * corr * oShare * 0.5;
+        o.pushY += ay * corr * oShare * 0.5;
+        // along-path squeeze: the trailing unit slows down instead of pushing forward
+        const uAhead = u.pathIndex > o.pathIndex;
+        const blocker = uAhead ? u : o;
+        const follower = uAhead ? o : u;
+        follower.pushX -= (follower.x - blocker.x) * 0.02;
+        follower.pushY -= (follower.y - blocker.y) * 0.02;
+        return;
+      }
       u.pushX -= nx * corr * uShare;
       u.pushY -= ny * corr * uShare;
       o.pushX += nx * corr * oShare;
