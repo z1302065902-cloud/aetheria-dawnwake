@@ -221,6 +221,42 @@ const applied =
   (blessingApplied.id === 'march' && blessingApplied.mods.unitSpeed >= 0.08);
 check('roguelite: the blessing is applied to the live match modifiers', applied, JSON.stringify(blessingApplied));
 
+// ── map-level random events ─────────────────────────────────────────
+const sched = await page.evaluate(() => {
+  const b = window.__AETHERIA_BATTLE__;
+  return { schedule: b.mapEvents.schedule.map((e) => `${e.kind}@${e.at}`), kinds: Array.from(new Set(b.mapEvents.schedule.map((e) => e.kind))) };
+});
+check('events: the map schedules several events on a timer', sched.schedule.length >= 3, sched.schedule.join(' | '));
+
+const evt = await page.evaluate(async () => {
+  const b = window.__AETHERIA_BATTLE__;
+  b.speed = 4;
+  const before = {
+    spots: b.adventure.spots.length,
+    mana: b.world.resources.filter((r) => r.resourceKind === 'mana').length,
+    beasts: b.world.units.filter((u) => u.team === 3).length,
+  };
+  for (const kind of ['merchant', 'meteor', 'migration']) b.mapEvents.begin(kind);
+  await new Promise((r) => setTimeout(r, 300));
+  const mid = { spots: b.adventure.spots.length, beasts: b.world.units.filter((u) => u.team === 3).length };
+  await new Promise((r) => setTimeout(r, 6000)); // meteor warning is 4 game-seconds
+  return {
+    before,
+    mid,
+    after: {
+      spots: b.adventure.spots.length,
+      mana: b.world.resources.filter((r) => r.resourceKind === 'mana').length,
+      beasts: b.world.units.filter((u) => u.team === 3).length,
+    },
+    history: b.mapEvents.view.map((e) => e.name),
+    merchant: b.adventure.spots.filter((x) => x.name === '流浪商人').length,
+  };
+});
+check('events: the wandering merchant adds a findable NPC', evt.merchant >= 1, JSON.stringify(evt.after));
+check('events: the meteor leaves mana crystal deposits behind', evt.after.mana > evt.before.mana, `mana ${evt.before.mana} → ${evt.after.mana}`);
+check('events: the beast migration spawns a herd', evt.after.beasts > evt.before.beasts, `beasts ${evt.before.beasts} → ${evt.after.beasts}`);
+check('events: fired events are recorded for the result screen', evt.history.length >= 3, evt.history.join(' / '));
+
 // ── map + main objectives stay fixed across runs ─────────────────────
 const fixed = await page.evaluate(async () => {
   const b = window.__AETHERIA_BATTLE__;

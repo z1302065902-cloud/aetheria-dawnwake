@@ -35,6 +35,7 @@ import { EnvironmentSystem } from '../systems/Environment';
 import { AutomationSystem } from '../systems/Automation';
 import { ArmyGroupSystem, STANCE_LABEL, type Stance } from '../systems/ArmyGroups';
 import { AdventureSystem } from '../systems/Adventure';
+import { MapEventsSystem } from '../systems/MapEvents';
 import { Rng } from '../core/Rng';
 import { rollLoot } from '../data/items';
 import type { MissionDef } from '../data/types';
@@ -111,7 +112,7 @@ export interface HudState {
   /** army groups with their stance */
   armies: Array<{ id: number; name: string; stance: string; count: number }>;
   /** adventure progress + the run blessing */
-  adventure: { found: number; remaining: number; blessing: string };
+  adventure: { found: number; remaining: number; blessing: string; events: string[] };
   /** Human readable list of the live relic bonuses (shown in the pause overlay). */
   relicLines: string[];
 }
@@ -141,6 +142,8 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
   automation!: AutomationSystem;
   armies!: ArmyGroupSystem;
   adventure!: AdventureSystem;
+  /** map-level random events (named mapEvents: `events` is Phaser's own Scene EventEmitter) */
+  mapEvents!: MapEventsSystem;
   /** per-run random blessing (Roguelite: maps and main objectives stay fixed) */
   runBlessing!: { id: string; name: string; desc: string };
   private fogImage!: Phaser.GameObjects.Image;
@@ -292,6 +295,17 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
       this.pushFeed('虚空裂隙涌出了暗影！', 'boss');
     };
 
+    // ── map-level random events: something happens TO the player on a timer ──
+    this.mapEvents = new MapEventsSystem(this, this.adventure, this.combat, this.mission.map.seed + this.mission.index * 313);
+    this.mapEvents.onWarn = (text, sub) => {
+      bus.emit(EV.BANNER, { text, sub });
+      this.pushFeed(text, 'boss');
+    };
+    this.mapEvents.onFired = (kind, name) => {
+      if (kind !== 'meteor') this.pushFeed(`${name} 出现`, 'skill');
+    };
+    this.mapEvents.build(3, 150, 130);
+
     // ── mission objects: escort caravan / rescue prisoner ──
     const needsEscort = this.mission.objectives.some((o) => o.kind === 'escort');
     const needsRescue = this.mission.objectives.some((o) => o.kind === 'rescue');
@@ -437,6 +451,7 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
       this.automation.update(dt);
       this.armies.update(dt);
       this.adventure.update(dt);
+      this.mapEvents.update(dt);
       this.orders.update(dt);
       this.ai.update(dt);
       this.movement.update(dt);
@@ -1102,6 +1117,7 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
       adventure: {
         found: this.adventure.collected.length,
         remaining: this.adventure.remaining,
+        events: this.mapEvents.view.map((e) => e.name),
         blessing: this.runBlessing ? `${this.runBlessing.name}：${this.runBlessing.desc}` : '',
       },
     };

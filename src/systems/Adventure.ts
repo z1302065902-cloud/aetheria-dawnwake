@@ -19,6 +19,8 @@ export interface AdventureSpot {
   used: boolean;
   /** how much XP a discovery is worth */
   xp: number;
+  /** probability this site also contains a piece of equipment */
+  itemChance?: number;
   gold: number;
   itemId?: string;
   relicId?: string;
@@ -88,35 +90,13 @@ export class AdventureSystem {
       return null;
     };
 
-    const add = (kind: AdventureKind, name: string, x: number, y: number, opts: Partial<AdventureSpot> = {}) => {
-      const spot: AdventureSpot = {
-        id: this.nextId++,
-        kind,
-        x,
-        y,
-        name,
-        sprite: null,
-        used: false,
-        xp: opts.xp ?? 40,
-        gold: opts.gold ?? 60,
-        itemId: opts.itemId,
-        relicId: opts.relicId,
-        spawn: opts.spawn,
-        spawnCount: opts.spawnCount,
-        revealed: false,
-        bob: this.rng.range(0, Math.PI * 2),
-      };
-      const key = kind === 'chest' ? 'adv_chest' : kind === 'npc' ? 'adv_npc' : kind === 'rift' ? 'adv_rift' : 'adv_cache';
-      const meta = metaOf(key);
-      spot.sprite = this.ctx.world.scene.add
-        .sprite(x, y, key)
-        .setOrigin(0.5, meta.sy)
-        .setScale(meta.sx)
-        .setDepth(DEPTH.ENTITY + y * 0.01);
-      this.spots.push(spot);
-      return spot;
-    };
-
+    const add = (
+      kind: AdventureKind,
+      name: string,
+      x: number,
+      y: number,
+      opts: Partial<AdventureSpot> & { itemChance?: number } = {},
+    ): AdventureSpot => this.addSpot(kind, name, x, y, opts);
     // treasure chests: the classic "detour is worth it"
     const chests = 3 + Math.round(density);
     for (let i = 0; i < chests; i++) {
@@ -141,6 +121,37 @@ export class AdventureSystem {
       const vault = add('relic', '遗物密室', sp.x, sp.y, { xp: 150, gold: 60, relicId: this.pickRelic() });
       vault.sprite?.setTint(0xd9c0ff);
     }
+  }
+
+  /** Places a single adventure site (used by the map event system for the merchant). */
+  addSpot(kind: AdventureKind, name: string, x: number, y: number, opts: Partial<AdventureSpot> & { itemChance?: number } = {}): AdventureSpot {
+    const spot: AdventureSpot = {
+      id: this.nextId++,
+      kind,
+      x,
+      y,
+      name,
+      sprite: null,
+      used: false,
+      xp: opts.xp ?? 40,
+      gold: opts.gold ?? 60,
+      itemId: opts.itemId,
+      relicId: opts.relicId,
+      spawn: opts.spawn,
+      spawnCount: opts.spawnCount,
+      revealed: false,
+      bob: this.rng.range(0, Math.PI * 2),
+    };
+    if (opts.itemChance !== undefined) spot.itemChance = opts.itemChance;
+    const key = kind === 'chest' ? 'adv_chest' : kind === 'npc' ? 'adv_npc' : kind === 'rift' ? 'adv_rift' : 'adv_cache';
+    const meta = metaOf(key);
+    spot.sprite = this.ctx.world.scene.add
+      .sprite(x, y, key)
+      .setOrigin(0.5, meta.sy)
+      .setScale(meta.sx)
+      .setDepth(DEPTH.ENTITY + y * 0.01);
+    this.spots.push(spot);
+    return spot;
   }
 
   private pickRelic(): string {
@@ -189,7 +200,8 @@ export class AdventureSystem {
     }
     if (spot.kind === 'chest' || spot.kind === 'cache') {
       // chests have a chance to contain equipment
-      if (this.rng.chance(spot.kind === 'chest' ? 0.55 : 0.2)) {
+      const chance = spot.itemChance ?? (spot.kind === 'chest' ? 0.55 : 0.2);
+      if (this.rng.chance(chance)) {
         const item = rollLoot(this.rng, 1);
         reward.item = item.id;
         reward.name = `${spot.name}（${item.name}）`;
