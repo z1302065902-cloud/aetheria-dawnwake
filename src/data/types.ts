@@ -153,7 +153,22 @@ export interface ObjectiveDef {
   hidden?: boolean;
   /** for hidden objectives: reveal once this other objective is done */
   revealAfter?: string;
-  kind: 'build' | 'produce' | 'gather' | 'destroy' | 'defend' | 'escort' | 'collect' | 'explore' | 'rescue' | 'survive' | 'boss';
+  kind:
+    | 'build'
+    | 'produce'
+    | 'gather'
+    | 'destroy'
+    | 'defend'
+    | 'escort'
+    | 'collect'
+    | 'explore'
+    | 'rescue'
+    | 'survive'
+    | 'boss'
+    /** hunt N neutral monsters — the hero's own content */
+    | 'hunt'
+    /** discover N adventure sites (chests, vaults, NPCs) — rewards exploring */
+    | 'adventure';
   target?: { unitId?: string; buildingId?: string; tag?: string; count?: number; total?: number };
   reward?: { gold?: number; xp?: number; relic?: string; item?: string };
 }

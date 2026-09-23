@@ -12,7 +12,7 @@ npx vite --port 5173 --strictPort &      # 测试都依赖 dev server
 npm run typecheck                        # 必须干净
 npm test                                 # 期望 60/60
 npm run test:singleplayer                # 期望 15/15
-npm run test:campaign                    # 期望 41/41：10 关全部能打到 Victory
+npm run test:campaign                    # 期望 51/51：10 关全部能打到 Victory + 三档任务齐备
 ```
 
 其他套件：`npm run test:layout`（24/24）· `npm run test:soak`（6/6）· `npm run test:gpu`（11/11，会弹窗）。
@@ -24,7 +24,7 @@ npm run test:campaign                    # 期望 41/41：10 关全部能打到 
 |---|---|
 | smoke（`npm test`） | **60/60** |
 | singleplayer（`npm run test:singleplayer`） | **15/15** |
-| campaign（`npm run test:campaign`） | **41/41**（10 关全部打到 Victory） |
+| campaign（`npm run test:campaign`） | **51/51**（10 关全部打到 Victory + 每关主/支线/隐藏齐备） |
 | tsc | 干净 |
 
 **已全部修好**（都是真 bug，不是测试凑数）：
@@ -42,11 +42,12 @@ npm run test:campaign                    # 期望 41/41：10 关全部能打到 
 
 ## 三、下一步优先级（设计契约在 `docs/singleplayer-design.md`）
 
-1. **打通上面 5 关到 Victory**（根因都已定位，属于修 bug 不是加功能）。
-2. **把隐藏/支线目标数据写满 10 关**：机制（`ObjectiveDef.hidden` + `revealAfter`）已就绪，只差数据。
+1. ~~打通 10 关到 Victory~~ ✅ 完成（51/51）。
+2. ~~隐藏/支线目标数据写满 10 关~~ ✅ 完成（每关 1 支线 + 1 隐藏，测试已断言）。
 3. **地图级随机事件**：目前只有定时波次 + 虚空裂隙；补流浪商人 / 天降陨石 / 兽群迁徙。
-4. **5/10/15/20 分钟节奏调参**：写 `tests/pacing.mjs` 量出来（第一关：5 分钟懂、10 分钟首次升级、15 分钟第一场大会战、20 分钟通关）。
-5. **结算页**展示本局祝福 + 冒险发现清单（"再玩一局"的动力）。
+4. **5/10/15/20 分钟节奏调参**：写 `tests/pacing.mjs` 量出来（第一关：5 分钟懂、10 分钟首次升级、
+   15 分钟第一场大会战、20 分钟通关）。注意 m01 的 `parTime` 目前是估算，未实测。
+5. **结算页**展示本局祝福 + 冒险发现清单 + 解锁进度（"再玩一局"的动力）。
 
 ## 四、改代码前必读的坑（都踩过、都在 `docs/PROGRESS.md`）
 

@@ -276,6 +276,7 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
     this.adventure.vision = this.vision;
     this.adventure.build(this.map.playerStart, this.map.searchPoints, 1 + this.mission.index * 0.35);
     this.adventure.onReward = (r) => {
+      this.missions.adventureFound++;
       this.pushFeed(`发现 ${r.name}（+${r.gold} 金 / +${r.xp} 经验）`, 'skill');
       bus.emit(EV.TOAST, `发现：${r.name}`);
     };

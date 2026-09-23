@@ -81,6 +81,10 @@ export class MissionSystem {
         return def.target?.count ?? 1;
       case 'defend':
         return def.target?.count ?? 1;
+      case 'hunt':
+        return def.target?.count ?? 1;
+      case 'adventure':
+        return def.target?.count ?? 1;
       case 'escort':
         return def.target?.count ?? 1;
       case 'rescue':
@@ -187,6 +191,14 @@ export class MissionSystem {
         }
         break;
       }
+      case 'hunt': {
+        o.progress = Math.min(o.total, this.neutralsKilled);
+        break;
+      }
+      case 'adventure': {
+        o.progress = Math.min(o.total, this.adventureFound);
+        break;
+      }
       case 'defend': {
         const id = o.def.target?.buildingId;
         if (id) {
@@ -271,6 +283,10 @@ export class MissionSystem {
   wavesSurvived = 0;
   /** set by the battle scene once the rescue target actually exists on the map */
   rescueTargetSpawned = false;
+  /** neutral monsters killed by the player (hunt objectives) */
+  neutralsKilled = 0;
+  /** adventure sites discovered (chest / cache / vault / NPC) */
+  adventureFound = 0;
   private prisonerFreed = false;
 
   // ────────────────────────── event feeds ──────────────────────────
@@ -295,6 +311,8 @@ export class MissionSystem {
         this.unitsKilledByPlayer++;
         world.grantXp(u.def.xp, u.x, u.y);
       }
+      // neutral wildlife counts separately: "hunt N beasts" is the hero's own objective
+      if (u.team === 3 && killerTeam === 1) this.neutralsKilled++;
       if (u.def.ai?.kind === 'boss') {
         // boss death is tracked through the objective
         audio.sfx('victory', 0.8);

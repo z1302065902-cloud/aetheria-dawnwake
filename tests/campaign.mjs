@@ -63,6 +63,8 @@ for (const id of MISSIONS) {
       searchPoints: b.map.searchPoints.length,
       objectives: b.missions.objectives.length,
       optional: b.missions.objectives.filter((o) => o.def.optional).length,
+      hidden: b.missions.objectives.filter((o) => o.def.hidden).length,
+      mainCount: b.missions.objectives.filter((o) => !o.def.optional).length,
       walkablePct: Math.round((walkable / (b.map.w * b.map.h)) * 100),
       reachable: (() => {
         // the hero must be able to path to the first enemy camp (proves the map is connected)
@@ -80,7 +82,24 @@ for (const id of MISSIONS) {
     JSON.stringify(layout),
   );
   check(`campaign[${id}]: hero can path from the base to the enemy camp`, layout.reachable, `walkable ${layout.walkablePct}%`);
-  check(`campaign[${id}]: has main + optional objectives`, layout.objectives >= 2, `${layout.objectives} objectives (${layout.optional} optional)`);
+  check(
+    `campaign[${id}]: has main objectives + at least one side quest + at least one hidden quest`,
+    layout.mainCount >= 2 && layout.optional >= 1 && layout.hidden >= 1,
+    `${layout.objectives} objectives: ${layout.mainCount} main / ${layout.optional} side / ${layout.hidden} hidden`,
+  );
+  // a hidden objective must not be visible before it is revealed, and must not gate victory
+  const hiddenState = await page.evaluate(() => {
+    const b = window.__AETHERIA_BATTLE__;
+    return {
+      hiddenInHud: b.getHudState().objectives.filter((o) => o.hidden).length,
+      victoryNeeds: b.missions.mainObjectives.length,
+    };
+  });
+  check(
+    `campaign[${id}]: hidden quests stay out of the HUD and out of the victory requirement`,
+    hiddenState.hiddenInHud === 0 && hiddenState.victoryNeeds === layout.mainCount,
+    JSON.stringify(hiddenState),
+  );
 
   // drive the mission to victory: force the counters AND play the gameplay objectives
   for (let step = 0; step < 6; step++) {
