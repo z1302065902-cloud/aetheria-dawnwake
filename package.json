@@ -16,7 +16,9 @@
     "test:layout": "node tests/layout.mjs",
     "test:soak": "node tests/soak.mjs",
     "test:gpu": "node tests/perf-gpu.mjs",
-    "test:gpu:uncapped": "UNCAPPED=1 node tests/perf-gpu.mjs"
+    "test:gpu:uncapped": "UNCAPPED=1 node tests/perf-gpu.mjs",
+    "test:singleplayer": "node tests/singleplayer.mjs",
+    "test:campaign": "node tests/campaign.mjs"
   },
   "dependencies": {
     "phaser": "^3.88.2"
