@@ -23,16 +23,55 @@ export class BuildSystem {
     // Prefer idle workers, then workers that are free to move, then anyone closest
     // (a placed building must never sit at 0% forever — that reads as a broken game).
     const byDistance = workers.slice().sort((a, b) => Math.hypot(a.x - site.x, a.y - site.y) - Math.hypot(b.x - site.x, b.y - site.y));
-    const idle = byDistance.filter((u) => u.state === 'idle' || u.state === 'move' || u.state === 'attackMove');
-    const chosen = (idle.length > 0 ? idle : byDistance).slice(0, 3);
+    // do not steal builders from another unfinished site: that is how a site ends up with
+    // zero builders and never completes (which also used to stall auto-production forever)
+    const committed = new Set<number>();
+    for (const u of workers) {
+      if (u.buildId >= 0 && u.buildId !== site.id) committed.add(u.id);
+    }
+    const free = byDistance.filter((u) => !committed.has(u.id));
+    const idle = free.filter((u) => u.state === 'idle' || u.state === 'move' || u.state === 'attackMove');
+    const chosen = (idle.length > 0 ? idle : free).slice(0, 3);
     if (chosen.length > 0) {
       this.orders.build(chosen, site);
       onAssigned?.(chosen);
     }
   }
 
+  /**
+   * Keeps every unfinished site staffed.
+   *
+   * A single-player RTS must not require the player to babysit a site: if builders die, get
+   * pulled away, or the player places two buildings at once, the site has to recover on its
+   * own. Without this a site could sit at 0% forever.
+   */
+  private staffSites(dt: number): void {
+    this.staffTimer += dt;
+    if (this.staffTimer < 1) return;
+    this.staffTimer = 0;
+    const { world } = this.ctx;
+    const sites = world.buildings.filter((b) => b.team === 1 && b.building && !b.dead);
+    if (sites.length === 0) return;
+    const counts = new Map<number, number>();
+    for (const u of world.units) {
+      if (u.dead || u.def.role !== 'worker' || u.buildId < 0) continue;
+      counts.set(u.buildId, (counts.get(u.buildId) ?? 0) + 1);
+    }
+    for (const site of sites) {
+      if ((counts.get(site.id) ?? 0) > 0) continue;
+      const workers = world.units.filter((u) => u.team === 1 && u.def.role === 'worker' && !u.dead && u.buildId < 0);
+      if (workers.length === 0) return;
+      const nearest = workers.sort((a, b) => Math.hypot(a.x - site.x, a.y - site.y) - Math.hypot(b.x - site.x, b.y - site.y))[0];
+      this.orders.build([nearest], site);
+      counts.set(site.id, 1);
+    }
+  }
+
+  private staffTimer = 0;
+
   update(dt: number): void {
     const { world } = this.ctx;
+    this.staffSites(dt);
     const builders = new Map<number, number>();
     for (const u of world.units) {
       if (u.dead || u.def.role !== 'worker') continue;
@@ -41,6 +80,19 @@ export class BuildSystem {
         if (u.state === 'build' || u.state === 'buildGo') {
           u.buildId = -1;
           this.orders.finishOrder(u);
+        }
+        continue;
+      }
+      // The job is over the moment the building is finished — release the worker no matter
+      // what state or distance it is in. Missing this left workers parked in 'build' forever
+      // (buildId still set), automation skips builders, and the whole economy went dead.
+      if (!target.building) {
+        u.buildId = -1;
+        if (u.state === 'build' || u.state === 'buildGo') {
+          const kind = u.lastGatherKind;
+          const node = kind ? world.nearestResource(kind, u.x, u.y) : null;
+          if (node && !u.carrying) this.orders.gather([u], node, kind!);
+          else this.orders.finishOrder(u);
         }
         continue;
       }

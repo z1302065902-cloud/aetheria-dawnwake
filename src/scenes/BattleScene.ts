@@ -443,10 +443,11 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
       this.visionTimer += dt;
       if (this.visionTimer >= 0.15) {
         this.visionTimer = 0;
-    this.feed = [];
         this.vision.update(this.world);
         this.vision.paint();
       }
+      // while the player is deciding where to put a building, automation must not spend
+      if (this.placementId) this.automation.holdProduction(0.5);
       this.environment.update(dt);
       this.automation.update(dt);
       this.armies.update(dt);
@@ -835,7 +836,7 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
     this.placementId = buildingId;
     this.pendingAbility = null;
     // stop auto-spending so the player's building is always affordable
-    this.automation?.holdProduction(12);
+    this.automation?.holdProduction(1);
     const key = `b_${buildingId}`;
     if (this.ghost) this.ghost.destroy();
     this.ghost = this.add.image(0, 0, key).setOrigin(0.5, metaOf(key).sy).setAlpha(0.6).setScale(metaOf(key).sx).setDepth(DEPTH.FX);
@@ -854,31 +855,40 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
     this.ghost.setAlpha(check.ok ? 0.65 : 0.4);
   }
 
-  private tryPlaceBuilding(pointer: Phaser.Input.Pointer): void {
-    const id = this.placementId;
-    if (!id) return;
-    const def = getBuilding(id);
-    const wp = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
-    const check = this.world.canPlaceBuilding(def, wp.x, wp.y);
+  /**
+   * Places a building at a world position, validating exactly like the mouse path does.
+   * Public so tests (and a future scripted player) can build without synthesising pointers.
+   */
+  placeBuildingAt(buildingId: string, worldX: number, worldY: number, keepPlacing = false): { ok: boolean; reason?: string } {
+    const def = getBuilding(buildingId);
+    const check = this.world.canPlaceBuilding(def, worldX, worldY);
     if (!check.ok) {
       bus.emit(EV.TOAST, '无法建造：' + check.reason);
       audio.sfx('error', 0.4);
-      return;
+      return { ok: false, reason: check.reason };
     }
     if (!this.world.canAfford(def.cost)) {
       bus.emit(EV.TOAST, '资源不足：' + this.costText(def.cost));
       audio.sfx('error', 0.4);
-      this.cancelPlacement();
-      return;
+      if (!keepPlacing) this.cancelPlacement();
+      return { ok: false, reason: 'cost' };
     }
     this.world.spend(def.cost);
-    const site = this.world.spawnBuilding(id, wp.x, wp.y, FACTION.PLAYER, false);
+    const site = this.world.spawnBuilding(buildingId, worldX, worldY, FACTION.PLAYER, false);
     audio.sfx('build', 0.6);
     this.build.startConstruction(site, (assigned) => this.markManual(assigned, 30));
+    if (!keepPlacing) this.cancelPlacement();
+    return { ok: true };
+  }
+
+  private tryPlaceBuilding(pointer: Phaser.Input.Pointer): void {
+    const id = this.placementId;
+    if (!id) return;
+    const wp = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
     // keep placing while shift is held (classic RTS)
     const shift = (pointer.event as MouseEvent | undefined)?.shiftKey;
-    if (!shift) this.cancelPlacement();
-    else if (!this.world.canAfford(def.cost)) this.cancelPlacement();
+    const res = this.placeBuildingAt(id, wp.x, wp.y, !!shift);
+    if (!res.ok && res.reason === 'cost') return; // placeBuildingAt already cancelled
   }
 
   private cancelPlacement(): void {

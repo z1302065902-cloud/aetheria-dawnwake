@@ -64,8 +64,13 @@ export class AutomationSystem {
   private hold = new Map<number, number>();
   /** automation stops spending while the player is placing a building */
   private productionHoldUntil = 0;
-  /** resources the automation will never spend: the player may be saving for a building */
-  reserve: { gold: number; wood: number } = { gold: 220, wood: 140 };
+  /**
+   * Resources automation never spends. Kept at zero on purpose: a fixed reserve starved the
+   * early game (m01 starts with 420 gold, two production buildings leave ~140, and a 220
+   * reserve then meant nothing was ever trained). Protection comes from pausing instead:
+   * the player entering build placement, or having an unfinished site, stops all spending.
+   */
+  reserve: { gold: number; wood: number } = { gold: 0, wood: 0 };
 
   /** Production preference per building id (data-driven, defaults to the first entry). */
   productionOrder: Record<string, string> = {
@@ -157,8 +162,11 @@ export class AutomationSystem {
     const current: Record<ResourceKind, number> = { gold: 0, wood: 0, mana: 0 };
     const pool: Unit[] = [];
     for (const u of workers) {
-      // never pull a builder off a site, and never override a recent manual order
-      if (u.state === 'build' || u.state === 'buildGo' || u.buildId >= 0) continue;
+      // never pull a worker off a site that is STILL being built; a worker whose building is
+      // already finished is free (this used to be a permanent skip and killed the economy)
+      const site = u.buildId >= 0 ? this.ctx.world.entityById(u.buildId) : undefined;
+      const stillBuilding = !!site && (site as unknown as { building?: boolean }).building === true;
+      if (stillBuilding || u.state === 'build' || u.state === 'buildGo') continue;
       if (this.isHeld(u)) continue;
       const kind = this.assignment.get(u.id);
       if (kind && (u.state === 'gather' || u.state === 'gatherGo' || u.state === 'returnGo')) current[kind]++;
@@ -223,11 +231,65 @@ export class AutomationSystem {
     }
   }
 
+  /**
+   * How many settlers the economy wants: roughly two per live resource node, floored at 6 and
+   * capped at 14. Without this the castle happily produced settlers forever (they are the
+   * cheapest unit) and the army never got built — which is exactly the "base grows but the
+   * army does not exist" failure the redesign is supposed to prevent.
+   */
+  private workerTarget(): number {
+    let nodes = 0;
+    for (const r of this.ctx.world.resources) {
+      if (!r.dead && !r.depleted) nodes++;
+    }
+    // two workers per node is right for a human, but as an automatic target it meant the
+    // castle spent every coin on settlers for ten minutes and no army ever existed
+    return Math.min(10, Math.max(5, Math.round(nodes * 0.7)));
+  }
+
+  /** Combat units the automation wants before it stops reinforcing. */
+  private combatTarget(): number {
+    return 10;
+  }
+
+  private combatCount(): number {
+    let n = 0;
+    for (const u of this.ctx.world.units) {
+      if (!u.dead && u.team === 1 && u.def.role !== 'worker' && !u.isHero) n++;
+    }
+    for (const b of this.ctx.world.buildings) {
+      if (b.dead || b.team !== 1) continue;
+      for (const item of b.production) if (getUnit(item.unitId).role !== 'worker') n++;
+    }
+    return n;
+  }
+
+  private workerCount(): number {
+    let n = 0;
+    for (const u of this.ctx.world.units) {
+      if (!u.dead && u.team === 1 && u.def.role === 'worker') n++;
+    }
+    // settlers already queued count toward the target
+    for (const b of this.ctx.world.buildings) {
+      if (b.dead || b.team !== 1) continue;
+      for (const item of b.production) if (getUnit(item.unitId).role === 'worker') n++;
+    }
+    return n;
+  }
+
   private autoProduce(): void {
     if (this.ctx.now < this.productionHoldUntil) return; // player is placing a building
     const world = this.ctx.world;
     // while the player's own building is under construction, every spare coin goes there
     if (world.buildings.some((b) => b.team === 1 && b.building)) return;
+    const workers = this.workerCount();
+    const wantWorkers = this.workerTarget();
+    const combat = this.combatCount();
+    // alternate between economy and army by whichever has the bigger gap, so the army is
+    // always funded instead of the castle eating every coin
+    const workerGap = Math.max(0, wantWorkers - workers);
+    const combatGap = Math.max(0, this.combatTarget() - combat);
+    const armyFirst = combatGap > workerGap;
     for (const b of world.buildings) {
       if (b.dead || b.team !== 1 || b.building) continue;
       const wants = b.def.produces ?? [];
@@ -235,10 +297,13 @@ export class AutomationSystem {
       if (b.production.length >= 1) continue; // one unit at a time: no runaway spending
       const preferred = this.productionOrder[b.def.id] ?? wants[0];
       const unitId = wants.includes(preferred) ? preferred : wants[0];
-      const def = getUnit(unitId);
-      // keep a construction reserve so automation can never block the player's building
-      if (world.wallet.gold - (def.cost.gold ?? 0) < this.reserve.gold) continue;
-      if (world.wallet.wood - (def.cost.wood ?? 0) < this.reserve.wood) continue;
+      // stop growing the economy once it is big enough, and never let it starve the army
+      const isWorker = getUnit(unitId).role === 'worker';
+      if (isWorker && (workers >= wantWorkers || armyFirst)) continue;
+      // SAVE for the unit this building is meant to make instead of buying a cheap substitute.
+      // Buying the cheapest affordable unit every second left the wallet at ~0 gold, so a
+      // 90-gold soldier was never funded and no army ever existed.
+      if (this.production.canQueue(b, unitId) !== 'ok') continue;
       if (this.production.enqueue(b, unitId) === 'ok') {
         this.onProduced?.(b, unitId);
       }
