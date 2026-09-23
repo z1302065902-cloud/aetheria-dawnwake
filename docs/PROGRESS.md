@@ -2,8 +2,9 @@
 
 > **换 agent、隔天续做、上下文压缩后，先读这一份。**
 > 最后更新：2026-09-23（第五轮进行中：**单人向重做** —— 自动化 / 编组姿态 / 冒险层 / 随机祝福 / 十关解锁 / 地面去方块感 / 四足美术）
-> ⚠️ 第五轮的代码**已提交为 WIP**（提交信息带 `wip(singleplayer)`），**未完全验证通过**：
-> `tests/campaign.mjs` 有 **5 项失败**，详见下面「一之二。」与「四、已知问题」。接手请从那里开始。
+> ⚠️ 第五轮的代码**已提交**：`6b3dabb wip(singleplayer)` + `25287bc chore(verification)`。
+> **已验证**：`npm run typecheck` ✅ · `node tests/smoke.mjs` **60/60** ✅（原 60 项无回归）。
+> **未通过**：`node tests/campaign.mjs` **5/36 失败**（m01/m04/m06/m08/m09 走不到 Victory）—— 接手从这里开始。
 
 ---
 
@@ -62,8 +63,9 @@ CPU 随单位数线性增长（约 1.4µs/单位），60 单位只占 60FPS 预�
 |---|---|
 | `npm run typecheck` | ✅ 通过 |
 | `node tests/campaign.mjs`（新，10 关 × 4 断言 = 36 项） | ❌ **5 项失败**（见下） |
-| `node tests/smoke.mjs`（原 60 项，本轮改过 3 处 fixture） | 待补测（本轮只跑到中途 13 项全过） |
-| `node tests/singleplayer.mjs`（新，单人向设计断言） | 待补测 |
+| `node tests/smoke.mjs`（原 60 项，本轮改过 3 处 fixture） | ✅ **60/60 通过，0 失败**（原样输出：`docs/verification/2026-09-23-smoke-run.log`） |
+| `node tests/singleplayer.mjs`（新，单人向设计断言） | 待补测（本轮启动了但未取回结果） |
+| `node tests/campaign.mjs` 原样输出 | `docs/verification/2026-09-23-campaign-run.log` |
 
 **campaign 的 5 项失败（原样记录，未修）**
 

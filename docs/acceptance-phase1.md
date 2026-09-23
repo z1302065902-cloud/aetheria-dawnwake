@@ -12,8 +12,9 @@
 > 最近一次结果（2026-09-23 第四轮 · 战斗表现升级）：
 > **smoke 60/60（dev 与生产构建各一遍）· GPU 11/11 · layout 24/24 · soak 6/6**，控制台零 pageerror。
 >
-> ⚠️ **第五轮（单人向重做）正在进行中**：`npm run typecheck` 通过，新增 `tests/campaign.mjs` **5/36 失败**，
-> `tests/smoke.mjs` / `tests/singleplayer.mjs` 本轮未跑完。新增的 F 组条目按三档如实记状态，**未验证的记为「部分实现」，不记为已实现**。
+> ⚠️ **第五轮（单人向重做）已提交（`6b3dabb`）**：`npm run typecheck` 通过，**原 `tests/smoke.mjs` 60/60 无回归**，
+> 但新增 `tests/campaign.mjs` **5/36 失败**，`tests/singleplayer.mjs` 本轮未取回结果。
+> 新增的 F 组条目按三档如实记状态，**未验证的记为「部分实现」，不记为已实现**。
 
 ## 汇总
 
@@ -457,9 +458,9 @@
 
 ## F. 单人向重做（第五轮 · 进行中，WIP）
 
-> 本轮状态：**代码已提交为 WIP，但未全部验证通过**。
-> 实测：`npm run typecheck` ✅；`node tests/campaign.mjs` ❌ **5/36 失败**（详见 F-02）；
-> `node tests/smoke.mjs` / `node tests/singleplayer.mjs` 本轮未跑完 → 接手必须先跑这两条补测。
+> 本轮状态：**代码已提交（`6b3dabb`），部分验证通过**。
+> 实测：`npm run typecheck` ✅；`node tests/smoke.mjs` ✅ **60/60（原 60 项无回归）**；
+> `node tests/campaign.mjs` ❌ **5/36 失败**（详见 F-02）；`node tests/singleplayer.mjs` 本轮未取回结果 → 接手先跑它。
 
 ### F-01 自动化：基地与经济不需要玩家盯
 - 标准：闲置工人自动按金/木/晶配比去干活；生产建筑自动排产；**手动命令优先于自动化**。
