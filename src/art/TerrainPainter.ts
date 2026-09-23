@@ -18,9 +18,16 @@ function css(color: number, a = 1): string {
 export function paintTerrain(scene: Phaser.Scene, map: GeneratedMap, key = 'terrain'): string {
   const w = map.w * TILE;
   const h = map.h * TILE;
-  if (scene.textures.exists(key)) scene.textures.remove(key);
-  const canvasTex = scene.textures.createCanvas(key, w, h);
-  if (!canvasTex) throw new Error('[terrain] failed to create canvas texture');
+  // reuse an existing texture of the same size (destroying it invalidates live frames)
+  const existing = scene.textures.exists(key) ? (scene.textures.get(key) as Phaser.Textures.CanvasTexture) : null;
+  const canvasTex = existing && existing.source[0] && existing.source[0].width === w && existing.source[0].height === h
+    ? existing
+    : (() => {
+        if (scene.textures.exists(key)) scene.textures.remove(key);
+        const t = scene.textures.createCanvas(key, w, h);
+        if (!t) throw new Error('[terrain] failed to create canvas texture');
+        return t;
+      })();
   const c = canvasTex.getContext();
 
   // base fill
@@ -98,27 +105,7 @@ export function paintTerrain(scene: Phaser.Scene, map: GeneratedMap, key = 'terr
     }
   }
 
-  // Decor (trees / rocks) is stamped straight into the terrain texture: it keeps the
-  // whole map at ONE draw call, which is what makes 60 FPS with 60+ units trivial.
-  const stamp = (key: string, tx: number, ty: number, size: number, dy: number) => {
-    const src = scene.textures.get(key).getSourceImage() as CanvasImageSource;
-    if (!src) return;
-    const x = tx * TILE + TILE / 2 - size / 2;
-    const y = ty * TILE + TILE - size + dy;
-    c.drawImage(src, x, y, size, size);
-  };
-  for (let ty = 0; ty < map.h; ty++) {
-    for (let tx = 0; tx < map.w; tx++) {
-      const t = tileAt(map, tx, ty);
-      if (t === Tile.TREE) {
-        const v = (tx * 7 + ty * 13) % 3;
-        stamp(`terrain_tree_${v}`, tx, ty, 40, 6);
-      } else if (t === Tile.ROCK) {
-        stamp('terrain_rock', tx, ty, 36, 4);
-      }
-    }
-  }
-
+  // Trees/rocks are NO LONGER baked: they are sprites now so they can sway (EnvironmentSystem).
   canvasTex.refresh();
   return key;
 }
@@ -129,9 +116,15 @@ export function paintMinimapBase(scene: Phaser.Scene, map: GeneratedMap): string
   const scale = 3;
   const w = map.w * scale;
   const h = map.h * scale;
-  if (scene.textures.exists(key)) scene.textures.remove(key);
-  const canvasTex = scene.textures.createCanvas(key, w, h);
-  if (!canvasTex) throw new Error('[terrain] failed to create minimap texture');
+  const existing = scene.textures.exists(key) ? (scene.textures.get(key) as Phaser.Textures.CanvasTexture) : null;
+  const canvasTex = existing && existing.source[0] && existing.source[0].width === w && existing.source[0].height === h
+    ? existing
+    : (() => {
+        if (scene.textures.exists(key)) scene.textures.remove(key);
+        const t = scene.textures.createCanvas(key, w, h);
+        if (!t) throw new Error('[terrain] failed to create minimap texture');
+        return t;
+      })();
   const c = canvasTex.getContext();
   for (let ty = 0; ty < map.h; ty++) {
     for (let tx = 0; tx < map.w; tx++) {

@@ -64,6 +64,13 @@ export class HudScene extends Phaser.Scene {
   private objectiveTexts: Phaser.GameObjects.Text[] = [];
   private objectivePanelHeight = 0;
 
+  private bossRoot!: Phaser.GameObjects.Container;
+  private bossName!: Phaser.GameObjects.Text;
+  private bossPhase!: Phaser.GameObjects.Text;
+  private bossBar!: Bar;
+  private bossBg!: Phaser.GameObjects.Rectangle;
+  private feedTexts: Phaser.GameObjects.Text[] = [];
+
   private toast!: Phaser.GameObjects.Text;
   private toastTimer = 0;
   private bannerTitle!: Phaser.GameObjects.Text;
@@ -94,6 +101,7 @@ export class HudScene extends Phaser.Scene {
     this.produceButtons = [];
     this.queueTexts = [];
     this.objectiveTexts = [];
+    this.feedTexts = [];
     this.pauseButtons = [];
     this.resultButtons = [];
     this.volumeButtons = [];
@@ -103,6 +111,7 @@ export class HudScene extends Phaser.Scene {
     this.refreshAccum = 0;
     this.lastObjectiveSignature = '';
 
+    this.alive = true;
     this.battle = data.battle;
     this.staticG = this.add.graphics().setDepth(0);
 
@@ -184,6 +193,19 @@ export class HudScene extends Phaser.Scene {
       this.objectiveTexts.push(text(this, 0, 0, '', 12, toCss(PAL.uiText), { origin: [0, 0] }));
     }
 
+    // boss bar (hidden until a boss is on the field)
+    this.bossRoot = this.add.container(0, 0).setDepth(300).setVisible(false);
+    this.bossBg = this.add.rectangle(0, 0, 10, 10, 0x0b0f1a, 0.82).setStrokeStyle(1.5, 0xff6a5a, 0.9);
+    this.bossName = text(this, 0, 0, '', 16, toCss(0xffb0a0), { origin: [0.5, 0.5], bold: true });
+    this.bossPhase = text(this, 0, 0, '', 12, toCss(PAL.uiGold), { origin: [0.5, 0.5], bold: true });
+    this.bossRoot.add([this.bossBg, this.bossName, this.bossPhase]);
+    this.bossBar = new Bar(this, 0, 0, 10, 10, 0xe4564a);
+
+    // combat feed (newest first)
+    for (let i = 0; i < 5; i++) {
+      this.feedTexts.push(text(this, 0, 0, '', 12, toCss(PAL.uiText), { origin: [1, 0.5] }));
+    }
+
     // toast + banner
     this.toast = text(this, 0, 0, '', 15, toCss(PAL.uiText), { origin: [0.5, 0.5], bold: true }).setAlpha(0);
     this.bannerTitle = text(this, 0, 0, '', 30, toCss(PAL.uiGold), { origin: [0.5, 0.5], bold: true }).setAlpha(0);
@@ -202,6 +224,7 @@ export class HudScene extends Phaser.Scene {
 
     this.scale.on('resize', this.onResize);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.alive = false;
       for (const u of this.unsubs) u();
       this.unsubs.length = 0;
       this.scale.off('resize', this.onResize);
@@ -215,6 +238,12 @@ export class HudScene extends Phaser.Scene {
 
   private unsubs: Array<() => void> = [];
   private refreshAccum = 0;
+  /**
+   * False while the scene is shut down. Phaser can still step a scene in the frame it was
+   * stopped, and touching a label whose canvas texture is already destroyed throws
+   * "data.drawImage of null" — so every entry point checks this flag.
+   */
+  private alive = false;
 
   bind(battle: BattleScene): void {
     this.battle = battle;
@@ -225,6 +254,7 @@ export class HudScene extends Phaser.Scene {
   // ────────────────────────── layout ──────────────────────────
 
   private layout(): void {
+    if (!this.alive && this.W > 0) return;
     this.W = this.scale.width;
     this.H = this.scale.height;
     this.s = Phaser.Math.Clamp(Math.min(this.W / 1600, this.H / 900), 0.3, 1.6);
@@ -370,6 +400,27 @@ export class HudScene extends Phaser.Scene {
     }
     for (let i = 0; i < this.queueTexts.length; i++) {
       this.queueTexts[i].setPosition(cmdX + 14 * s, abY + 56 * s + i * 14 * s).setFontSize(11 * s);
+    }
+
+    // boss bar: centred, above the objectives panel line
+    const bossW = Math.min(560 * s, this.W * 0.46);
+    const bossH = 20 * s;
+    const bossX = this.W / 2 - bossW / 2;
+    const bossY = topH + 34 * s;
+    this.bossBg.setPosition(this.W / 2, bossY + bossH / 2).setSize(bossW + 12 * s, bossH + 30 * s);
+    this.bossName.setPosition(this.W / 2, bossY + 6 * s).setFontSize(16 * s);
+    this.bossPhase.setPosition(this.W / 2 + bossW / 2 - 10 * s, bossY + 6 * s).setFontSize(12 * s);
+    this.bossBar.x = bossX;
+    this.bossBar.y = bossY + 16 * s;
+    this.bossBar.w = bossW;
+    this.bossBar.h = bossH * 0.5;
+    this.bossRoot.setPosition(0, 0);
+
+    // combat feed under the objectives panel
+    const feedX = this.W - 14 * s;
+    const feedY = objY + 26 * s + 9 * 19 * s + 14 * s;
+    for (let i = 0; i < this.feedTexts.length; i++) {
+      this.feedTexts[i].setPosition(feedX, feedY + i * 17 * s).setFontSize(12 * s);
     }
 
     // toast + banner
@@ -526,6 +577,7 @@ export class HudScene extends Phaser.Scene {
   // ────────────────────────── per-frame refresh ──────────────────────────
 
   update(_t: number, delta: number): void {
+    if (!this.alive) return;
     const dt = delta / 1000;
     if (this.toastTimer > 0) {
       this.toastTimer -= dt;
@@ -722,6 +774,32 @@ export class HudScene extends Phaser.Scene {
       (viewW / mapW) * mmBounds.width,
       (viewH / mapH) * mmBounds.height,
     );
+
+    // boss bar
+    if (st.boss) {
+      this.bossRoot.setVisible(true);
+      this.bossName.setText(st.boss.visible ? st.boss.name : `${st.boss.name}（视野外）`);
+      this.bossPhase.setText(`阶段 ${st.boss.phase} / 3`);
+      this.bossBar.draw(st.boss.maxHp ? st.boss.hp / st.boss.maxHp : 0, 0.5);
+    } else {
+      this.bossRoot.setVisible(false);
+      this.bossBar.clear();
+    }
+
+    // combat feed
+    for (let i = 0; i < this.feedTexts.length; i++) {
+      const e = st.feed[i];
+      const t = this.feedTexts[i];
+      if (!t.scene) continue; // stale entry from a previous scene instance
+      if (!e) {
+        t.setText('');
+        continue;
+      }
+      t.setText(e.text);
+      const base = e.kind === 'loss' ? 0xff8a7a : e.kind === 'boss' ? 0xffd257 : e.kind === 'skill' ? 0x9ff0ff : 0x9fffb0;
+      t.setColor(toCss(base));
+      t.setAlpha(Math.max(0.15, 1 - e.age / 6));
+    }
 
     // volume labels
     this.musicLabel.setText(`音乐音量 ${Math.round(save.current.settings.music * 100)}%`);

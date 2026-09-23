@@ -114,11 +114,14 @@ export class HeroAbilities {
           a.addBuff({ id: skill.id, until: now + skill.duration, attackMul: 1.35, speedMul: 1.2 });
         }
         this.ctx.fx.telegraph(hero.x, hero.y, skill.radius, 500, skill.icon.color);
+        this.ctx.fx.shake(2.4, 0.14, 'heavy');
         this.ctx.fx.burst('fx_spark_warm', hero.x, hero.y, 18, 180, 0.7, 1.4, -60, 0xffc861);
         break;
       }
       case 'spin': {
         hero.channel = { skill, until: now + skill.duration, tickAt: now };
+        this.castCircle(hero.x, hero.y, skill.radius, skill.icon.color, skill.duration);
+        this.ctx.fx.shake(3, 0.16, 'heavy');
         break;
       }
       case 'guard': {
@@ -148,7 +151,11 @@ export class HeroAbilities {
       }
       case 'meteor': {
         const radius = skill.radius;
-        this.ctx.fx.telegraph(tx, ty, radius, 900, skill.icon.color);
+        // sky sigil -> falling rock -> red ground warning -> explosion -> fire -> AOE
+        this.ctx.fx.skySigil(tx, ty, 900, skill.icon.color);
+        this.ctx.fx.fallingRock(tx, ty, 900, radius, skill.icon.color);
+        this.ctx.fx.telegraph(tx, ty, radius, 900, 0xff5a4a);
+        this.ctx.fx.shake(4, 0.18, 'heavy');
         this.zone({
           x: tx,
           y: ty,
@@ -291,10 +298,42 @@ export class HeroAbilities {
     }
     const magic = z.damageType === 'magic';
     if (hits > 0) {
-      this.ctx.fx.explosion(z.x + (Math.random() - 0.5) * z.radius, z.y + (Math.random() - 0.5) * z.radius, Math.min(80, z.radius), magic, true);
+      const ex = z.x + (Math.random() - 0.5) * z.radius;
+      const ey = z.y + (Math.random() - 0.5) * z.radius;
+      this.ctx.fx.explosion(ex, ey, Math.min(80, z.radius), magic, true);
+      this.ctx.fx.scorch(ex, ey, z.radius * 0.9, magic);
     } else {
       this.ctx.fx.burst(magic ? 'fx_spark_arc' : 'fx_spark_leaf', z.x, z.y, 6, 90, 0.4, 1.1, 60, z.color);
     }
+  }
+
+  /** Glowing ring under the caster while a channelled skill runs. */
+  private castCircle(x: number, y: number, radius: number, color: number, duration: number): void {
+    this.ctx.fx.spawn({
+      texture: 'fx_ring_warm',
+      x,
+      y,
+      life: Math.max(0.4, duration),
+      scale0: radius / 26,
+      scale1: radius / 30,
+      alpha0: 0.75,
+      alpha1: 0.15,
+      rotSpeed: 1.1,
+      tint: color,
+      depth: 12,
+    });
+    this.ctx.fx.spawn({
+      texture: 'fx_glow_warm',
+      x,
+      y,
+      life: Math.max(0.4, duration),
+      scale0: radius / 34,
+      scale1: radius / 40,
+      alpha0: 0.35,
+      alpha1: 0.08,
+      tint: color,
+      depth: 12,
+    });
   }
 
   /** Adds a queued/instant area effect. */

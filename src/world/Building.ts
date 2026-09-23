@@ -50,7 +50,7 @@ export class Building extends Entity {
   }
 
   updateSprite(dt: number): void {
-    const spr = this.sprite as Phaser.GameObjects.Image | null;
+    const spr = this.sprite;
     if (!spr) return;
     spr.setPosition(this.x, this.y);
     spr.setDepth(100 + this.y * 0.01);

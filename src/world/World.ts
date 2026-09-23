@@ -60,6 +60,11 @@ export class World {
   /** Wired by the battle scene: kill notifications (XP, objectives, audio). */
   onKilled: ((entity: Unit | Building, killerTeam: number) => void) | null = null;
 
+  /** Sprites that outlive their unit to play the death animation, then fade out. */
+  private corpses: Array<{ sprite: Phaser.GameObjects.Sprite; ttl: number }> = [];
+  private static readonly CORPSE_TTL = 7;
+  private static readonly CORPSE_FADE = 2.5;
+
   constructor(scene: Phaser.Scene, map: GeneratedMap, fx: FxSystem) {
     this.scene = scene;
     this.map = map;
@@ -103,13 +108,14 @@ export class World {
     }
     const meta = metaOf(key);
     unit.sprite = this.scene.add
-      .image(x, y, key)
+      .sprite(x, y, key)
       .setOrigin(0.5, meta.sy)
       .setScale(meta.sx)
       .setDepth(DEPTH.ENTITY + y * 0.01);
     unit.homeX = x;
     unit.homeY = y;
     unit.facing = 1;
+    unit.playAnim('idle');
     this.units.push(unit);
     this.byId.set(unit.id, unit);
     this.unitSeq++;
@@ -129,7 +135,7 @@ export class World {
     const key = `b_${def.id}`;
     const meta = metaOf(key);
     b.sprite = this.scene.add
-      .image(x, y, key)
+      .sprite(x, y, key)
       .setOrigin(0.5, meta.sy)
       .setScale(meta.sx)
       .setDepth(DEPTH.ENTITY + y * 0.01);
@@ -148,11 +154,11 @@ export class World {
     const key = kind === 'gold' ? 'res_gold' : kind === 'wood' ? 'terrain_tree_1' : 'res_mana';
     const meta = metaOf(key);
     node.sprite = this.scene.add
-      .image(x, y, key)
+      .sprite(x, y, key)
       .setOrigin(0.5, meta.sy)
       .setScale(meta.sx * (kind === 'wood' ? 1.15 : 1))
       .setDepth(DEPTH.ENTITY + y * 0.01);
-    if (kind === 'wood') node.sprite.setTint(0xbfe08a);
+    if (kind === 'wood' && node.sprite) node.sprite.setTint(0xbfe08a);
     this.resources.push(node);
     this.byId.set(node.id, node);
     return node;
@@ -385,15 +391,20 @@ export class World {
       hero.clearOrders();
       hero.sprite?.setVisible(false);
       hero.sprite?.setActive(false);
-      this.fx.death(hero.x, hero.y, `u_${hero.heroDef.id}`, 1);
+      this.fx.deathDust(hero.x, hero.y, hero.radius * 1.4);
       this.onKilled?.(hero, killerTeam);
       return;
     }
     unit.dead = true;
     unit.setState('dead');
-    this.fx.death(unit.x, unit.y, `u_${unit.def.id}`, metaOf(`u_${unit.def.id}`).sx * 1.05);
-    unit.sprite?.destroy();
-    unit.sprite = null;
+    unit.animState = null;
+    // the unit's own sprite plays the collapse animation, then stays as a corpse and fades
+    if (unit.sprite) {
+      unit.playAnim('death', true);
+      this.corpses.push({ sprite: unit.sprite, ttl: World.CORPSE_TTL });
+      unit.sprite = null;
+    }
+    this.fx.deathDust(unit.x, unit.y, unit.radius);
     this.byId.delete(unit.id);
     const idx = this.units.indexOf(unit);
     if (idx >= 0) this.units.splice(idx, 1);
@@ -406,7 +417,8 @@ export class World {
     b.dead = true;
     this.occupyFootprint(b, false);
     this.fx.explosion(b.x, b.y, b.radius * 1.6, false);
-    this.fx.death(b.x, b.y, `b_${b.def.id}`, metaOf(`b_${b.def.id}`).sx * 0.8);
+    this.fx.scorch(b.x, b.y, b.radius * 1.2);
+    this.fx.deathDust(b.x, b.y, b.radius);
     b.sprite?.destroy();
     b.sprite = null;
     this.byId.delete(b.id);
@@ -434,7 +446,28 @@ export class World {
     for (const u of this.units) u.updateSprite(dt);
     for (const b of this.buildings) b.updateSprite(dt);
     for (const r of this.resources) r.updateSprite(0);
+    this.updateCorpses(dt);
     if (this.vision) this.applyFog();
+  }
+
+  private updateCorpses(dt: number): void {
+    for (let i = this.corpses.length - 1; i >= 0; i--) {
+      const c = this.corpses[i];
+      c.ttl -= dt;
+      if (c.ttl <= World.CORPSE_FADE) {
+        c.sprite.setAlpha(Math.max(0, c.ttl / World.CORPSE_FADE));
+        // sink slightly into the ground as they fade
+        c.sprite.y += dt * 1.2;
+      }
+      if (c.ttl <= 0) {
+        c.sprite.destroy();
+        this.corpses.splice(i, 1);
+      }
+    }
+  }
+
+  get corpseCount(): number {
+    return this.corpses.length;
   }
 
   /**
@@ -470,7 +503,7 @@ export class World {
     for (let i = this.resources.length - 1; i >= 0; i--) {
       const r = this.resources[i];
       if (r.dead || r.depleted) {
-        if (r.depleted && !r.dead) this.fx.death(r.x, r.y, r.resourceKind === 'wood' ? 'terrain_tree_1' : 'res_gold', 1);
+        if (r.depleted && !r.dead) this.fx.deathDust(r.x, r.y, 16);
         r.dead = true;
         r.sprite?.destroy();
         r.sprite = null;
@@ -524,6 +557,8 @@ export class World {
   }
 
   dispose(): void {
+    for (const c of this.corpses) c.sprite.destroy();
+    this.corpses.length = 0;
     for (const u of this.units) u.sprite?.destroy();
     for (const b of this.buildings) b.sprite?.destroy();
     for (const r of this.resources) r.sprite?.destroy();

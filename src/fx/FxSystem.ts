@@ -4,19 +4,93 @@ import { Pool } from '../core/Pool';
 import { FloatingText } from '../world/Projectile';
 import { metaOf } from '../art/SpriteFactory';
 
+type ShakeTier = 'light' | 'heavy' | 'ultimate';
+
+interface FxItem {
+  img: Phaser.GameObjects.Image;
+  life: number;
+  maxLife: number;
+  vx: number;
+  vy: number;
+  gravity: number;
+  scale0: number;
+  scale1: number;
+  alpha0: number;
+  alpha1: number;
+  rotSpeed: number;
+  additive: boolean;
+}
+
+export interface FxSpawnOptions {
+  texture: string;
+  x: number;
+  y: number;
+  life?: number;
+  vx?: number;
+  vy?: number;
+  gravity?: number;
+  scale0?: number;
+  scale1?: number;
+  alpha0?: number;
+  alpha1?: number;
+  rotSpeed?: number;
+  rotation?: number;
+  depth?: number;
+  additive?: boolean;
+  tint?: number;
+}
+
 /**
- * Combat feedback layer. Every attack in the game routes through here so the player
- * always gets: hit spark + damage number + flash + sound hook + optional shake.
+ * Combat feedback layer.
+ *
+ * Everything here is pooled: one-shot effects come from a fixed pool of sprites that are
+ * driven by a manual integrator (no tweens, no per-frame allocation), and floating text
+ * comes from its own pool. That is what keeps a 60-unit brawl from turning into a GC storm.
+ *
+ * Camera shake runs through a priority budget: light shakes are rate-limited and never
+ * override a heavier one, so the screen does not vibrate during a big fight.
  */
 export class FxSystem {
   private scene: Phaser.Scene;
-  private emitters = new Map<string, Phaser.GameObjects.Particles.ParticleEmitter>();
+  private items: Pool<FxItem>;
   private texts: Pool<FloatingText>;
-  private shakeT = 0;
-  private shakeAmp = 0;
+  private shakeTier: ShakeTier | null = null;
+  private shakeUntil = 0;
+  private lastLightShake = -1;
+  private now = 0;
+  /** counters for the perf tests */
+  spawnCount = 0;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
+
+    this.items = new Pool<FxItem>(
+      () => {
+        const img = scene.add.image(0, 0, 'fx_spark_warm').setDepth(DEPTH.FX).setVisible(false);
+        return {
+          img,
+          life: 0,
+          maxLife: 1,
+          vx: 0,
+          vy: 0,
+          gravity: 0,
+          scale0: 1,
+          scale1: 0,
+          alpha0: 1,
+          alpha1: 0,
+          rotSpeed: 0,
+          additive: true,
+        };
+      },
+      (it) => {
+        it.img.setVisible(true).setActive(true);
+      },
+      (it) => {
+        it.img.setVisible(false).setActive(false);
+      },
+      220,
+    );
+
     this.texts = new Pool<FloatingText>(
       () => {
         const ft = new FloatingText();
@@ -34,111 +108,323 @@ export class FxSystem {
         ft.active = false;
         ft.label?.setVisible(false);
       },
-      40,
+      48,
     );
   }
 
-  private emitter(key: string, texture: string, config: Phaser.Types.GameObjects.Particles.ParticleEmitterConfig): Phaser.GameObjects.Particles.ParticleEmitter {
-    let em = this.emitters.get(key);
-    if (!em) {
-      em = this.scene.add.particles(0, 0, texture, { ...config, emitting: false }).setDepth(DEPTH.FX);
-      this.emitters.set(key, em);
+  // ────────────────────────── pool plumbing ──────────────────────────
+
+  spawn(o: FxSpawnOptions): void {
+    const it = this.items.acquire();
+    this.spawnCount++;
+    const meta = metaOf(o.texture);
+    it.img
+      .setTexture(o.texture)
+      .setPosition(o.x, o.y)
+      .setDepth(o.depth ?? DEPTH.FX)
+      .setRotation(o.rotation ?? 0)
+      .setBlendMode(o.additive === false ? Phaser.BlendModes.NORMAL : Phaser.BlendModes.ADD)
+      .setAlpha(o.alpha0 ?? 1);
+    if (o.tint !== undefined) it.img.setTint(o.tint);
+    else it.img.clearTint();
+    const s0 = (o.scale0 ?? 1) * meta.sx;
+    const s1 = (o.scale1 ?? 0) * meta.sx;
+    it.img.setScale(s0);
+    it.life = o.life ?? 0.4;
+    it.maxLife = it.life;
+    it.vx = o.vx ?? 0;
+    it.vy = o.vy ?? 0;
+    it.gravity = o.gravity ?? 0;
+    it.scale0 = s0;
+    it.scale1 = s1;
+    it.alpha0 = o.alpha0 ?? 1;
+    it.alpha1 = o.alpha1 ?? 0;
+    it.rotSpeed = o.rotSpeed ?? 0;
+    it.additive = o.additive !== false;
+  }
+
+  private sparkBurst(x: number, y: number, count: number, texture: string, opts: { speed: number; life: number; scale: number; gravity?: number; biasX?: number; biasY?: number; tint?: number; depth?: number }): void {
+    const biasX = opts.biasX ?? 0;
+    const biasY = opts.biasY ?? 0;
+    for (let i = 0; i < count; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const sp = opts.speed * (0.35 + Math.random() * 0.75);
+      this.spawn({
+        texture,
+        x: x + (Math.random() - 0.5) * 4,
+        y: y + (Math.random() - 0.5) * 4,
+        vx: Math.cos(a) * sp + biasX,
+        vy: Math.sin(a) * sp * 0.7 + biasY - opts.speed * 0.15,
+        gravity: opts.gravity ?? 160,
+        life: opts.life * (0.6 + Math.random() * 0.6),
+        scale0: opts.scale * (0.7 + Math.random() * 0.6),
+        scale1: 0,
+        rotSpeed: (Math.random() - 0.5) * 8,
+        tint: opts.tint,
+        depth: opts.depth,
+      });
     }
-    return em;
   }
 
-  burst(texture: string, x: number, y: number, count: number, speed: number, life: number, scale: number, gravity = 0, tint?: number): void {
-    const key = `b_${texture}_${count}_${speed}_${life}_${scale}_${gravity}_${tint ?? 0}`;
-    const em = this.emitter(key, texture, {
-      speed: { min: speed * 0.35, max: speed },
-      lifespan: { min: life * 0.5, max: life },
-      scale: { start: scale, end: 0 },
-      quantity: count,
-      blendMode: 'ADD',
-      gravityY: gravity,
-      tint,
-    });
-    em.explode(count, x, y);
-  }
+  // ────────────────────────── combat feedback ──────────────────────────
 
-  /** Melee / ranged impact. */
-  hit(x: number, y: number, kind: 'physical' | 'magic' | 'siege' | 'blood' = 'physical', power = 1): void {
+  /** Impact at a hit point. `dirX/dirY` biases the spray along the hit direction. */
+  hit(x: number, y: number, kind: 'physical' | 'magic' | 'siege' | 'blood' = 'physical', power = 1, dirX = 0, dirY = 0): void {
+    const bias = { biasX: dirX * 90, biasY: dirY * 50 };
     if (kind === 'magic') {
-      this.burst('fx_spark_arc', x, y, 7, 130, 0.32, 1.1 * power, 0, 0x9ff0ff);
-      this.burst('fx_glow_cool', x, y, 1, 12, 0.26, 1.5 * power);
+      this.sparkBurst(x, y, 8, 'fx_spark_arc', { speed: 150, life: 0.34, scale: 1.1 * power, tint: 0x9ff0ff, ...bias });
+      this.spawn({ texture: 'fx_glow_cool', x, y, life: 0.26, scale0: 1.4 * power, scale1: 2.4 * power });
     } else if (kind === 'siege') {
-      this.burst('fx_smoke', x, y, 8, 100, 0.6, 1.5 * power, -20, 0x8a8478);
-      this.burst('fx_spark_warm', x, y, 12, 180, 0.38, 1.3 * power, 220, 0xffc861);
+      this.sparkBurst(x, y, 12, 'fx_spark_warm', { speed: 200, life: 0.4, scale: 1.3 * power, gravity: 320, tint: 0xffc861, ...bias });
+      this.sparkBurst(x, y, 6, 'fx_smoke', { speed: 70, life: 0.7, scale: 1.5, gravity: -30, tint: 0x8a8478, depth: DEPTH.FX - 1 });
     } else if (kind === 'blood') {
-      this.burst('fx_spark_blood', x, y, 6, 110, 0.4, 1 * power, 260, 0xd94a4a);
+      this.sparkBurst(x, y, 7, 'fx_spark_blood', { speed: 130, life: 0.42, scale: 1 * power, gravity: 300, tint: 0xd94a4a, ...bias });
     } else {
-      this.burst('fx_spark_warm', x, y, 6, 150, 0.22, 1 * power, 120, 0xffe2a0);
-      this.burst('fx_glow_warm', x, y, 1, 10, 0.16, 1.1 * power);
+      this.sparkBurst(x, y, 7, 'fx_spark_warm', { speed: 170, life: 0.24, scale: 1 * power, gravity: 140, tint: 0xffe2a0, ...bias });
+      this.spawn({ texture: 'fx_glow_warm', x, y, life: 0.18, scale0: 0.9 * power, scale1: 1.5 * power });
     }
+  }
+
+  /** Bigger, gold, unmistakable critical hit. */
+  critBurst(x: number, y: number, dirX = 0, dirY = 0): void {
+    this.sparkBurst(x, y, 16, 'fx_spark_warm', { speed: 260, life: 0.5, scale: 1.7, gravity: 240, tint: 0xffd257, biasX: dirX * 120, biasY: dirY * 70 });
+    this.spawn({ texture: 'fx_ring_warm', x, y, life: 0.3, scale0: 0.3, scale1: 2.2, alpha0: 0.95 });
+    this.spawn({ texture: 'fx_glow_warm', x, y, life: 0.32, scale0: 1.6, scale1: 3.2 });
+    this.shake(3, 0.12, 'light');
   }
 
   slash(x: number, y: number, angle: number, dark = false): void {
-    const img = this.scene.add
-      .image(x, y, dark ? 'fx_slash_dark' : 'fx_slash')
-      .setDepth(DEPTH.FX)
-      .setRotation(angle)
-      .setScale(metaOf('fx_slash').sx * 1.1);
-    this.scene.tweens.add({ targets: img, alpha: 0, scaleX: img.scaleX * 1.5, scaleY: img.scaleY * 1.5, duration: 180, onComplete: () => img.destroy() });
+    this.spawn({
+      texture: dark ? 'fx_slash_dark' : 'fx_slash',
+      x,
+      y,
+      rotation: angle,
+      life: 0.18,
+      scale0: 1.1,
+      scale1: 1.7,
+      alpha0: 1,
+    });
   }
 
   muzzle(x: number, y: number, angle: number, warm = true): void {
-    const img = this.scene.add
-      .image(x, y, warm ? 'fx_glow_warm' : 'fx_glow_cool')
-      .setDepth(DEPTH.FX)
-      .setScale(metaOf('fx_glow_warm').sx * 0.7)
-      .setRotation(angle);
-    this.scene.tweens.add({ targets: img, alpha: 0, duration: 120, onComplete: () => img.destroy() });
+    this.spawn({
+      texture: warm ? 'fx_glow_warm' : 'fx_glow_cool',
+      x,
+      y,
+      rotation: angle,
+      life: 0.12,
+      scale0: 0.7,
+      scale1: 0.4,
+      alpha0: 0.9,
+    });
+  }
+
+  /** Generic pooled burst (kept as a small API for hero abilities). */
+  burst(texture: string, x: number, y: number, count: number, speed: number, life: number, scale: number, gravity = 0, tint?: number): void {
+    this.sparkBurst(x, y, count, texture, { speed, life, scale, gravity, tint });
+  }
+
+  /** Short projectile trail puff. */
+  trail(x: number, y: number, magic: boolean, size = 0.5): void {
+    this.spawn({
+      texture: magic ? 'fx_glow_cool' : 'fx_smoke',
+      x,
+      y,
+      life: magic ? 0.22 : 0.34,
+      scale0: size,
+      scale1: 0.1,
+      alpha0: magic ? 0.75 : 0.35,
+      additive: magic,
+      depth: DEPTH.PROJECTILE - 1,
+      tint: magic ? undefined : 0x9a9488,
+    });
   }
 
   explosion(x: number, y: number, radius: number, magic = false, small = false): void {
-    const ringTex = magic ? 'fx_ring_cool' : 'fx_ring_warm';
-    const ring = this.scene.add.image(x, y, ringTex).setDepth(DEPTH.FX).setScale(0.2);
-    const target = (radius / 26) * metaOf(ringTex).sx * (small ? 0.7 : 1);
-    this.scene.tweens.add({ targets: ring, scaleX: target, scaleY: target, alpha: 0, duration: 380, ease: 'Cubic.easeOut', onComplete: () => ring.destroy() });
-    const glow = this.scene.add
-      .image(x, y, magic ? 'fx_glow_void' : 'fx_glow_warm')
-      .setDepth(DEPTH.FX)
-      .setScale(metaOf('fx_glow_warm').sx * (radius / 24));
-    this.scene.tweens.add({ targets: glow, alpha: 0, scaleX: glow.scaleX * 1.5, scaleY: glow.scaleY * 1.5, duration: 340, onComplete: () => glow.destroy() });
-    this.burst(magic ? 'fx_spark_arc' : 'fx_spark_warm', x, y, magic ? 14 : 18, magic ? 220 : 260, 0.5, 1.6, 160, magic ? 0x9ff0ff : 0xffb04a);
-    this.burst('fx_smoke', x, y, small ? 4 : 9, 90, 0.7, 1.8, -30, 0x6f6a62);
-    this.shake(small ? 3 : Math.min(11, radius / 12), small ? 0.12 : 0.24);
+    const scale = radius / 26;
+    this.spawn({
+      texture: magic ? 'fx_ring_cool' : 'fx_ring_warm',
+      x,
+      y,
+      life: small ? 0.28 : 0.38,
+      scale0: 0.2,
+      scale1: scale * (small ? 0.8 : 1.15),
+      alpha0: 0.95,
+    });
+    this.spawn({
+      texture: magic ? 'fx_glow_void' : 'fx_glow_warm',
+      x,
+      y,
+      life: 0.34,
+      scale0: scale * 0.9,
+      scale1: scale * 1.7,
+      alpha0: 0.9,
+    });
+    this.sparkBurst(x, y, small ? 10 : 18, magic ? 'fx_spark_arc' : 'fx_spark_warm', {
+      speed: magic ? 230 : 270,
+      life: 0.5,
+      scale: 1.6,
+      gravity: 170,
+      tint: magic ? 0x9ff0ff : 0xffb04a,
+    });
+    this.sparkBurst(x, y, small ? 4 : 9, 'fx_smoke', { speed: 90, life: 0.8, scale: 1.9, gravity: -30, tint: 0x6f6a62, depth: DEPTH.FX - 1 });
+    this.shake(small ? 2.5 : Math.min(8, radius / 14), small ? 0.12 : 0.24, 'heavy');
   }
 
-  /** Ground telegraph under an incoming AoE (boss slams, meteor). */
-  telegraph(x: number, y: number, radius: number, durationMs: number, color = 0xff5a4a): Phaser.GameObjects.Image {
-    const ring = this.scene.add.image(x, y, 'fx_ring_danger').setDepth(DEPTH.DECAL + 1).setScale((radius / 34) * metaOf('fx_ring_danger').sx);
-    ring.setTint(color);
-    ring.setAlpha(0.85);
-    this.scene.tweens.add({ targets: ring, alpha: 0.25, duration: Math.max(80, durationMs / 6), yoyo: true, repeat: -1 });
-    this.scene.time.delayedCall(durationMs, () => {
-      this.scene.tweens.killTweensOf(ring);
-      ring.destroy();
+  /** Burning ground left behind by fire/meteor — long-lived, fades out. */
+  scorch(x: number, y: number, radius: number, magic = false): void {
+    this.spawn({
+      texture: magic ? 'fx_glow_void' : 'fx_glow_warm',
+      x,
+      y,
+      life: 9,
+      scale0: radius / 22,
+      scale1: radius / 30,
+      alpha0: 0.35,
+      alpha1: 0,
+      additive: false,
+      depth: DEPTH.DECAL + 2,
+      tint: magic ? 0x6f4fbf : 0x3a2a1a,
     });
-    return ring;
+  }
+
+  /** A rock falling from the sky onto a target point (meteor skills). */
+  fallingRock(x: number, y: number, delayMs: number, radius: number, color = 0xff7a3a): void {
+    const life = Math.max(0.15, delayMs / 1000);
+    this.spawn({
+      texture: 'p_boulder',
+      x,
+      y: y - 260,
+      life,
+      vx: 0,
+      vy: 260 / life,
+      gravity: 320,
+      scale0: 0.8 + radius / 90,
+      scale1: 1.1 + radius / 70,
+      alpha0: 1,
+      alpha1: 1,
+      rotSpeed: 3.2,
+      additive: false,
+      tint: 0x6b5a4a,
+    });
+    // burning trail behind it
+    for (let i = 0; i < 10; i++) {
+      this.spawn({
+        texture: 'fx_glow_warm',
+        x: x + (Math.random() - 0.5) * 14,
+        y: y - 250 + i * 24,
+        life: life * 0.9 + 0.2,
+        scale0: 1.1,
+        scale1: 0.1,
+        alpha0: 0.55,
+        alpha1: 0,
+        tint: color,
+      });
+    }
+  }
+
+  /** Ground telegraph for an incoming AoE (boss slam, meteor, arrow rain). */
+  telegraph(x: number, y: number, radius: number, durationMs: number, color = 0xff5a4a): void {
+    const life = Math.max(0.12, durationMs / 1000);
+    this.spawn({
+      texture: 'fx_ring_danger',
+      x,
+      y,
+      life,
+      scale0: (radius / 34) * 0.6,
+      scale1: radius / 34,
+      alpha0: 0.9,
+      alpha1: 0.5,
+      additive: false,
+      tint: color,
+      depth: DEPTH.DECAL + 3,
+    });
+    this.spawn({
+      texture: 'fx_ring_danger',
+      x,
+      y,
+      life,
+      scale0: radius / 34,
+      scale1: (radius / 34) * 1.04,
+      alpha0: 0.55,
+      alpha1: 0.15,
+      additive: true,
+      tint: color,
+      depth: DEPTH.DECAL + 3,
+    });
+  }
+
+  /** Dust + smoke puff when something dies (the sprite itself plays the collapse). */
+  deathDust(x: number, y: number, radius: number): void {
+    const count = Math.min(12, 5 + Math.round(radius * 0.25));
+    for (let i = 0; i < count; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const sp = 22 + Math.random() * 34;
+      this.spawn({
+        texture: 'fx_smoke',
+        x: x + Math.cos(a) * 4,
+        y: y - 4 + Math.sin(a) * 3,
+        vx: Math.cos(a) * sp,
+        vy: -12 - Math.random() * 18,
+        gravity: -6,
+        life: 0.7 + Math.random() * 0.5,
+        scale0: 0.7 + Math.random() * 0.5,
+        scale1: 1.9 + Math.random() * 0.6,
+        alpha0: 0.5,
+        alpha1: 0,
+        additive: false,
+        tint: 0x8d867a,
+        depth: DEPTH.CORPSE + 1,
+      });
+    }
+    this.sparkBurst(x, y - 4, 4, 'fx_spark_blood', { speed: 90, life: 0.4, scale: 0.9, gravity: 280, tint: 0xb03a3a });
   }
 
   levelUp(x: number, y: number): void {
     for (let i = 0; i < 3; i++) {
-      this.scene.time.delayedCall(i * 130, () => {
-        const ring = this.scene.add.image(x, y, 'fx_ring_warm').setDepth(DEPTH.FX).setScale(0.2);
-        this.scene.tweens.add({ targets: ring, scaleX: 1.6, scaleY: 1.6, alpha: 0, duration: 620, ease: 'Cubic.easeOut', onComplete: () => ring.destroy() });
+      this.spawn({
+        texture: 'fx_ring_warm',
+        x,
+        y,
+        life: 0.62,
+        scale0: 0.2,
+        scale1: 1.7 + i * 0.3,
+        alpha0: 0.9,
+        rotation: i * 0.4,
       });
     }
-    this.burst('fx_spark_warm', x, y, 22, 160, 1.0, 1.5, -120, 0xffd257);
+    this.sparkBurst(x, y, 22, 'fx_spark_warm', { speed: 170, life: 1, scale: 1.5, gravity: -120, tint: 0xffd257 });
   }
 
-  death(x: number, y: number, texture: string, scale: number): void {
-    const spr = this.scene.add.image(x, y, texture).setDepth(DEPTH.CORPSE).setScale(scale).setAlpha(0.9).setTint(0x6a5a5a);
-    const meta = metaOf(texture);
-    spr.setOrigin(0.5, meta.sy);
-    this.scene.tweens.add({ targets: spr, alpha: 0, y: y + 4, duration: 3200, delay: 900, onComplete: () => spr.destroy() });
-    this.burst('fx_smoke', x, y, 5, 60, 0.8, 1.2, -28, 0x555055);
+  /** Sky sigil for meteor-style spells (rotating magic circle above the target). */
+  skySigil(x: number, y: number, durationMs: number, color = 0xff7a3a): void {
+    const life = Math.max(0.2, durationMs / 1000);
+    this.spawn({
+      texture: 'fx_ring_warm',
+      x,
+      y: y - 130,
+      life,
+      scale0: 0.4,
+      scale1: 1.5,
+      alpha0: 0.9,
+      alpha1: 0.2,
+      rotSpeed: 2.4,
+      tint: color,
+      depth: DEPTH.FX - 2,
+    });
+    this.spawn({
+      texture: 'fx_ring_warm',
+      x,
+      y: y - 130,
+      life,
+      scale0: 1.1,
+      scale1: 0.6,
+      alpha0: 0.6,
+      alpha1: 0.1,
+      rotSpeed: -1.6,
+      tint: color,
+      depth: DEPTH.FX - 2,
+    });
   }
 
   damageText(x: number, y: number, amount: number, kind: 'damage' | 'crit' | 'heal' | 'mana' | 'xp' = 'damage'): void {
@@ -147,17 +433,68 @@ export class FxSystem {
     ft.active = true;
     ft.x = x + Phaser.Math.Between(-8, 8);
     ft.y = y - 12;
-    ft.life = kind === 'crit' ? 1.05 : 0.85;
+    ft.life = kind === 'crit' ? 1.15 : 0.85;
     ft.maxLife = ft.life;
-    const label = kind === 'crit' ? `${Math.round(amount)}!` : kind === 'heal' ? `+${Math.round(amount)}` : kind === 'xp' ? `+${Math.round(amount)} XP` : `${Math.round(amount)}`;
+    ft.vy = kind === 'crit' ? -52 : -34;
+    const label =
+      kind === 'crit' ? `${Math.round(amount)}!` : kind === 'heal' ? `+${Math.round(amount)}` : kind === 'xp' ? `+${Math.round(amount)} XP` : `${Math.round(amount)}`;
     ft.label.setText(label);
     ft.label.setColor(kind === 'crit' ? '#ffd257' : kind === 'heal' ? '#7dff9b' : kind === 'mana' ? '#7fd8ff' : kind === 'xp' ? '#c084fc' : '#ffffff');
-    ft.label.setFontSize(kind === 'crit' ? 20 : kind === 'xp' ? 14 : 15);
+    ft.label.setFontSize(kind === 'crit' ? 23 : kind === 'xp' ? 14 : 15);
     ft.label.setPosition(ft.x, ft.y);
     ft.label.setDepth(DEPTH.FX + 5);
+    if (kind === 'crit') {
+      ft.label.setScale(1.35);
+      this.scene.tweens.add({ targets: ft.label, scaleX: 1, scaleY: 1, duration: 160 });
+    }
   }
 
+  // ────────────────────────── camera shake budget ──────────────────────────
+
+  /**
+   * Priority shake: 'light' (normal hits) is rate limited and can never override a heavier
+   * shake; 'ultimate' (boss death / meteor) always wins. Keeps a 60-unit brawl from
+   * turning the screen into jelly.
+   */
+  shake(amp: number, duration: number, tier: ShakeTier = 'light'): void {
+    const now = this.now;
+    if (tier === 'light') {
+      if (this.shakeTier === 'heavy' || this.shakeTier === 'ultimate') return;
+      if (now - this.lastLightShake < 0.22) return;
+      this.lastLightShake = now;
+      amp = Math.min(amp, 2.2);
+    } else if (tier === 'heavy') {
+      if (this.shakeTier === 'ultimate' && now < this.shakeUntil) return;
+      amp = Math.min(amp, 7);
+    } else {
+      amp = Math.min(amp, 14);
+    }
+    this.shakeTier = tier;
+    this.shakeUntil = now + duration;
+    this.scene.cameras.main.shake(duration * 1000, amp / 1000, false);
+  }
+
+  // ────────────────────────── frame ──────────────────────────
+
   update(dt: number): void {
+    this.now += dt;
+    if (this.shakeTier && this.now >= this.shakeUntil) this.shakeTier = null;
+
+    this.items.forEachSafe((it) => {
+      it.life -= dt;
+      if (it.life <= 0) {
+        this.items.release(it);
+        return;
+      }
+      const t = 1 - it.life / it.maxLife;
+      it.vy += it.gravity * dt;
+      it.img.x += it.vx * dt;
+      it.img.y += it.vy * dt;
+      if (it.rotSpeed) it.img.rotation += it.rotSpeed * dt;
+      it.img.setScale(it.scale0 + (it.scale1 - it.scale0) * t);
+      it.img.setAlpha(Math.max(0, it.alpha0 + (it.alpha1 - it.alpha0) * t));
+    });
+
     this.texts.forEachSafe((ft) => {
       ft.life -= dt;
       if (ft.life <= 0) {
@@ -170,24 +507,14 @@ export class FxSystem {
       ft.label?.setPosition(ft.x, ft.y);
       ft.label?.setAlpha(Math.min(1, t * 1.6));
     });
-    if (this.shakeT > 0) {
-      this.shakeT -= dt;
-      if (this.shakeT <= 0) {
-        this.scene.cameras.main.setScroll(this.scene.cameras.main.scrollX, this.scene.cameras.main.scrollY);
-      }
-    }
   }
 
-  shake(amp: number, duration: number): void {
-    if (amp <= this.shakeAmp && this.shakeT > 0) return;
-    this.shakeAmp = amp;
-    this.shakeT = duration;
-    this.scene.cameras.main.shake(duration * 1000, amp / 1000, false);
+  get activeEffects(): number {
+    return this.items.size;
   }
 
   clear(): void {
-    for (const em of this.emitters.values()) em.destroy();
-    this.emitters.clear();
-    this.texts.releaseAll();
+    this.items.forEachSafe((it) => this.items.release(it));
+    this.texts.forEachSafe((ft) => this.texts.release(ft));
   }
 }

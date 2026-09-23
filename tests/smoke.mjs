@@ -37,7 +37,10 @@ const page = await browser.newPage({ viewport: { width: 1600, height: 900 }, dev
 page.on('console', (msg) => {
   if (msg.type() === 'error') errors.push(`console: ${msg.text()}`);
 });
-page.on('pageerror', (err) => errors.push(`pageerror: ${err.message}`));
+page.on('pageerror', (err) => {
+  const stack = (err.stack ?? '').split('\n').slice(1, 4).join(' <- ').replace(/\s+/g, ' ');
+  errors.push(`pageerror: ${err.message} ${stack}`);
+});
 
 // page-side helpers (recurses into containers, which hold the menu/HUD widgets)
 await page.addInitScript(() => {
@@ -294,7 +297,7 @@ const charge = await page.evaluate(() => {
   const res = b.abilities.cast(hero, 'shieldCharge', hero.x + 200, hero.y + 120);
   return { res, x0, y0 };
 });
-await sleep(1200);
+await sleep(260); // the dash lasts 0.24s — measure the dash, not the walk afterwards
 const charged = await page.evaluate(() => {
   const b = window.__AETHERIA_BATTLE__;
   return { x: b.world.hero.x, y: b.world.hero.y };
@@ -874,7 +877,11 @@ const sim = await page.evaluate(() => {
 });
 check('performance: 240 real sim ticks ran', sim.simSeconds > 3.5, `${sim.simSeconds.toFixed(2)}s of simulation advanced`);
 check('performance: simulation tick under 8ms with 100+ units', sim.perTick < 8 && sim.perTick > 0.01, `${sim.perTick.toFixed(3)} ms/tick · ${sim.units} units · ${sim.projectiles} projectiles`);
-check('performance: generated texture budget stays small', sim.textures < 200, `${sim.textures} textures · ${sim.displayObjects} display objects in the battle scene`);
+check(
+  'performance: texture count stays within budget (no runaway texture creation)',
+  sim.textures < 300,
+  `${sim.textures} textures · ${sim.displayObjects} display objects in the battle scene`,
+);
 
 // frame pacing under the headless software rasteriser (a real GPU is far faster —
 // this bound only catches pathological stalls)

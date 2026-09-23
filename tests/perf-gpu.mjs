@@ -167,6 +167,83 @@ try {
   console.log('(boss-fight screenshot timed out)');
 }
 
+// ── 3b. required table: 10 / 20 / 40 / 60 units ─────────────────────
+// FPS (rAF frame time), CPU (simulation cost per tick), memory (JS heap after GC).
+const rows = [];
+const cdp = await page.context().newCDPSession(page);
+for (const target of [10, 20, 40, 60]) {
+  await page.evaluate((n) => {
+    const b = window.__AETHERIA_BATTLE__;
+    // reset to a controlled population: remove every non-player unit, then spawn exactly n
+    for (const u of [...b.world.units]) b.world.killUnit(u, 2);
+    b.ai.camps = [];
+    b.ai.nextWaveAt = 1e9;
+    b.ai.bossSpawned = true;
+    b.world.popMax = 300;
+    b.world.wallet.gold = 9999;
+    const camp = b.world.buildings.find((x) => x.team === 2 && x.def.id === 'wb_camp') ?? { x: b.world.map.playerStart.x + 500, y: b.world.map.playerStart.y };
+    const squad = [];
+    for (let i = 0; i < n; i++) {
+      const u = b.world.spawnUnit(i % 3 === 0 ? 'archer' : i % 7 === 0 ? 'squire' : 'footman', camp.x - 260 + (i % 6) * 34, camp.y - 120 + Math.floor(i / 6) * 34, 'dawn');
+      u.team = 1;
+      squad.push(u);
+    }
+    b.world.recomputePop();
+    b.orders.move(squad, camp.x, camp.y, true);
+    b.cameras.main.setZoom(1.0);
+    b.cameras.main.centerOn(camp.x - 120, camp.y - 40);
+  }, target);
+  await sleep(3500);
+  const measured = await page.evaluate(async () => {
+    const b = window.__AETHERIA_BATTLE__;
+    // CPU: run the real update pipeline 120 times and time it
+    const t0 = performance.now();
+    for (let i = 0; i < 120; i++) b.update(0, 16.7);
+    const cpuMs = (performance.now() - t0) / 120;
+    // FPS: rAF frame pacing
+    const frames = [];
+    let last = performance.now();
+    await new Promise((resolve) => {
+      let n = 0;
+      const step = (t) => {
+        frames.push(t - last);
+        last = t;
+        if (++n < 180) requestAnimationFrame(step);
+        else resolve();
+      };
+      requestAnimationFrame(step);
+    });
+    const sorted = frames.slice(2).sort((a, c) => a - c);
+    const avg = sorted.reduce((a, c) => a + c, 0) / sorted.length;
+    return {
+      frameMs: avg,
+      p95: sorted[Math.floor(sorted.length * 0.95)],
+      worst: sorted[sorted.length - 1],
+      cpuMs,
+      units: b.world.units.filter((u) => !u.dead).length,
+      enemies: b.world.units.filter((u) => u.team === 2).length,
+      effects: b.fx.activeEffects,
+      projectiles: b.combat.activeProjectiles,
+      heapMB: performance.memory ? performance.memory.usedJSHeapSize / (1024 * 1024) : -1,
+    };
+  });
+  await cdp.send('HeapProfiler.collectGarbage').catch(() => {});
+  await sleep(250);
+  const heap = await page.evaluate(() => (performance.memory ? performance.memory.usedJSHeapSize / (1024 * 1024) : -1));
+  rows.push({ target, ...measured, heapMB: heap > 0 ? heap : measured.heapMB });
+  console.log(
+    `[units ${String(target).padStart(3)}] frame ${measured.frameMs.toFixed(2)}ms (${(1000 / measured.frameMs).toFixed(0)} FPS) · cpu ${measured.cpuMs.toFixed(3)}ms/tick · p95 ${measured.p95.toFixed(2)}ms · worst ${measured.worst.toFixed(2)}ms · heap ${rows[rows.length - 1].heapMB.toFixed(0)}MB · ${measured.units} alive`,
+  );
+}
+console.log('\n| units | FPS | frame ms | sim ms/tick | p95 ms | worst ms | heap MB | effects |');
+console.log('|---|---|---|---|---|---|---|---|');
+for (const r of rows) {
+  console.log(`| ${r.target} | ${(1000 / r.frameMs).toFixed(0)} | ${r.frameMs.toFixed(2)} | ${r.cpuMs.toFixed(3)} | ${r.p95.toFixed(2)} | ${r.worst.toFixed(2)} | ${r.heapMB.toFixed(0)} | ${r.effects} |`);
+}
+check('perf table: every unit tier holds 60 FPS', rows.every((r) => r.frameMs <= 16.7), rows.map((r) => `${r.target}u:${(1000 / r.frameMs).toFixed(0)}fps`).join(' '));
+check('perf table: simulation stays under 3ms/tick at 60 units', rows.every((r) => r.cpuMs < 3), rows.map((r) => `${r.target}u:${r.cpuMs.toFixed(2)}ms`).join(' '));
+check('perf table: no frame spike over 50ms at any tier', rows.every((r) => r.worst <= 50), rows.map((r) => `${r.target}u:${r.worst.toFixed(1)}ms`).join(' '));
+
 // ── 4. headroom ramp: the numbers above are vsync-locked (120Hz), so push the unit
 // count far past the design cap until the frame budget actually breaks. This turns
 // "it hit the cap" into a real headroom number instead of a vsync echo.

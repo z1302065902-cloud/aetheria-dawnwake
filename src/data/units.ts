@@ -5,12 +5,21 @@ import type { ArtSpec, UnitDef } from './types';
  * player side, and the Wildborn/Yoidborn roster for the enemy. Everything else is
  * already data-complete but flagged phase 2 in the codex (see LOCKED_UNITS).
  */
-const humanoid = (body: number, trim: number, accent: number, weapon: ArtSpec['weapon'], scale = 1, mount = false, banner?: number): ArtSpec => ({
-  shape: 'humanoid', body, trim, accent, scale, weapon, mount, banner,
+const humanoid = (
+  body: number,
+  trim: number,
+  accent: number,
+  weapon: ArtSpec['weapon'],
+  scale = 1,
+  mount = false,
+  banner?: number,
+  archetype: ArtSpec['archetype'] = 'soldier',
+): ArtSpec => ({
+  archetype, shape: 'humanoid', body, trim, accent, scale, weapon, mount, banner,
 });
 
-const beast = (body: number, trim: number, accent: number, scale = 1): ArtSpec => ({
-  shape: 'beast', body, trim, accent, scale, weapon: 'claw',
+const beast = (body: number, trim: number, accent: number, scale = 1, archetype: ArtSpec['archetype'] = 'beast'): ArtSpec => ({
+  archetype, shape: 'beast', body, trim, accent, scale, weapon: 'claw',
 });
 
 function unit(u: Partial<UnitDef> & Pick<UnitDef, 'id' | 'name' | 'enName' | 'faction' | 'role' | 'hp' | 'attack' | 'armor' | 'moveSpeed' | 'attackRange' | 'attackCooldown' | 'art' | 'desc'>): UnitDef {
@@ -35,7 +44,7 @@ export const UNITS: Record<string, UnitDef> = {
     hp: 70, attack: 5, armor: 1, armorType: 'light',
     moveSpeed: 108, attackRange: 24, attackCooldown: 1.3,
     cost: { gold: 55 }, pop: 1, buildTime: 12, radius: 10, sightRange: 300, xp: 6,
-    art: humanoid(0xd9c79a, 0x8a6a3a, 0xffe9b0, 'pick', 0.92),
+    art: humanoid(0xd9c79a, 0x8a6a3a, 0xffe9b0, 'pick', 0.92, false, undefined, 'worker'),
     desc: '采集金币与木材，并负责建造与修理建筑。',
   }),
   footman: unit({
@@ -43,7 +52,7 @@ export const UNITS: Record<string, UnitDef> = {
     hp: 150, attack: 13, armor: 4, armorType: 'medium',
     moveSpeed: 96, attackRange: 26, attackCooldown: 1.15,
     cost: { gold: 90 }, pop: 2, buildTime: 15, radius: 11, sightRange: 330, xp: 14,
-    art: humanoid(0x4f7fd6, 0xc9d6ef, 0xfff0c0, 'sword'),
+    art: humanoid(0x4f7fd6, 0xc9d6ef, 0xfff0c0, 'sword', 1, false, undefined, 'soldier'),
     desc: '可靠的前排近战单位，能扛住荒野氏族的冲锋。',
   }),
   archer: unit({
@@ -53,7 +62,7 @@ export const UNITS: Record<string, UnitDef> = {
     moveSpeed: 104, attackRange: 185, attackCooldown: 1.25,
     cost: { gold: 80, wood: 35 }, pop: 2, buildTime: 17, radius: 10, sightRange: 380, xp: 14,
     projectile: { speed: 560, texture: 'arrow', splash: 0 },
-    art: humanoid(0x5aa06a, 0xe4d9b0, 0x9ff0c0, 'bow', 0.97),
+    art: humanoid(0x5aa06a, 0xe4d9b0, 0x9ff0c0, 'bow', 0.97, false, undefined, 'archer'),
     desc: '远程输出，脆但能在城墙后持续消耗敌人。',
   }),
   squire: unit({
@@ -61,7 +70,7 @@ export const UNITS: Record<string, UnitDef> = {
     hp: 205, attack: 15, armor: 6, armorType: 'heavy',
     moveSpeed: 118, attackRange: 28, attackCooldown: 1.0,
     cost: { gold: 130, wood: 20 }, pop: 2, buildTime: 20, radius: 12, xp: 18,
-    art: humanoid(0x6d86c9, 0xeff2fb, 0xffe08a, 'sword', 1.02, true),
+    art: humanoid(0x6d86c9, 0xeff2fb, 0xffe08a, 'lance', 1.02, true, undefined, 'knight'),
     desc: '骑乘冲锋的骑士，移动快、护甲高。',
   }),
   cleric: unit({
@@ -72,7 +81,7 @@ export const UNITS: Record<string, UnitDef> = {
     cost: { gold: 95, mana: 25 }, pop: 2, buildTime: 20, radius: 10, xp: 16,
     projectile: { speed: 420, texture: 'bolt', splash: 0 },
     special: undefined,
-    art: humanoid(0xf0ead6, 0xffd98a, 0xfff6d0, 'staff'),
+    art: humanoid(0xf0ead6, 0xffd98a, 0xfff6d0, 'staff', 1, false, undefined, 'mage'),
     desc: '治疗附近友军，并对亡灵造成额外伤害。',
   } as any),
   catapult: unit({
@@ -82,7 +91,7 @@ export const UNITS: Record<string, UnitDef> = {
     moveSpeed: 62, attackRange: 255, attackCooldown: 3.2,
     cost: { gold: 160, wood: 130 }, pop: 3, buildTime: 26, radius: 14, xp: 24,
     projectile: { speed: 300, texture: 'boulder', splash: 62 },
-    art: { shape: 'humanoid', body: 0x8a6f45, trim: 0x5d4a2c, accent: 0xc9b183, scale: 1.35, weapon: 'none' },
+    art: { archetype: 'siege', shape: 'humanoid', body: 0x8a6f45, trim: 0x5d4a2c, accent: 0xc9b183, scale: 1.35, weapon: 'engine' },
     desc: '攻城单位，对建筑造成巨额伤害，射速极慢。',
   }),
 
@@ -93,7 +102,7 @@ export const UNITS: Record<string, UnitDef> = {
     moveSpeed: 100, attackRange: 25, attackCooldown: 1.2,
     cost: { gold: 70 }, pop: 0, buildTime: 14, radius: 11, sightRange: 340, xp: 16,
     ai: { kind: 'camp', leash: 520 },
-    art: humanoid(0x8a5a3a, 0x5f3c24, 0xffb066, 'axe'),
+    art: humanoid(0x8a5a3a, 0x5f3c24, 0xffb066, 'axe', 1, false, undefined, 'orc'),
     desc: '荒野氏族的近战劫掠者，成群冲锋。',
   }),
   hunter: unit({
@@ -103,7 +112,7 @@ export const UNITS: Record<string, UnitDef> = {
     cost: { gold: 75 }, pop: 0, buildTime: 16, radius: 10, sightRange: 380, xp: 16,
     projectile: { speed: 500, texture: 'arrow', splash: 0 },
     ai: { kind: 'camp', leash: 520 },
-    art: humanoid(0x9c6a3f, 0x3f6b4a, 0xd9ffa0, 'bow', 0.95),
+    art: humanoid(0x9c6a3f, 0x3f6b4a, 0xd9ffa0, 'bow', 0.95, false, undefined, 'orc'),
     desc: '在远处放箭的荒野猎手，注意先手点掉。',
   }),
   wolfrider: unit({
@@ -112,7 +121,7 @@ export const UNITS: Record<string, UnitDef> = {
     moveSpeed: 138, attackRange: 28, attackCooldown: 1.1,
     cost: { gold: 110 }, pop: 0, buildTime: 20, radius: 13, sightRange: 380, xp: 22,
     ai: { kind: 'camp', leash: 620 },
-    art: humanoid(0x7a4a30, 0x2f2a26, 0xffcf7a, 'claw', 1.06, true),
+    art: humanoid(0x7a4a30, 0x2f2a26, 0xffcf7a, 'claw', 1.06, true, undefined, 'orc'),
     desc: '骑狼的快速突击单位，专咬后排。',
   }),
   direwolf: unit({
@@ -132,7 +141,7 @@ export const UNITS: Record<string, UnitDef> = {
     cost: {}, pop: 0, buildTime: 22, radius: 10, sightRange: 380, xp: 24,
     projectile: { speed: 380, texture: 'bolt', splash: 34 },
     ai: { kind: 'camp', leash: 480 },
-    art: humanoid(0x4a6f5a, 0x8a5a2a, 0x9fffd0, 'staff', 1.0, false, 0x2f8f6a),
+    art: humanoid(0x4a6f5a, 0x8a5a2a, 0x9fffd0, 'staff', 1.0, false, 0x2f8f6a, 'mage'),
     desc: '萨满的闪电会溅射，别让部队挤成一团。',
   }),
 
@@ -144,7 +153,7 @@ export const UNITS: Record<string, UnitDef> = {
     cost: {}, pop: 0, buildTime: 18, radius: 11, sightRange: 400, xp: 26,
     damageType: 'magic',
     ai: { kind: 'guard', leash: 420 },
-    art: humanoid(0x3b2c5e, 0x6f4fbf, 0xc39bff, 'claw'),
+    art: humanoid(0x3b2c5e, 0x6f4fbf, 0xc39bff, 'claw', 1, false, undefined, 'shade'),
     desc: '虚空侵蚀产生的暗影战士，攻击带魔法伤害。',
   }),
 
@@ -166,7 +175,7 @@ export const UNITS: Record<string, UnitDef> = {
     damageType: 'magic',
     projectile: { speed: 340, texture: 'bolt', splash: 46 },
     ai: { kind: 'boss', leash: 700 },
-    art: humanoid(0x2b2044, 0x9a6bff, 0x7fd8ff, 'staff', 1.7, false, 0x6f4fbf),
+    art: humanoid(0x2b2044, 0x9a6bff, 0x7fd8ff, 'staff', 1.7, false, 0x6f4fbf, 'shade'),
     desc: '虚空潮汐的先知，会召唤护盾与暗影新星。',
   }),
   ancientdragon: unit({

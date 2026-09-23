@@ -28,7 +28,7 @@ export abstract class Entity {
 
   dead = false;
   selected = false;
-  sprite: Phaser.GameObjects.Image | null = null;
+  sprite: Phaser.GameObjects.Sprite | null = null;
 
   /** Visual hit flash timer (seconds). */
   flash = 0;

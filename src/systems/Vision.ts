@@ -15,8 +15,8 @@ import type { World } from '../world/World';
  */
 export const FOG_TEX = 'fog';
 
-const ALPHA_UNEXPLORED = 0.94;
-const ALPHA_EXPLORED = 0.58;
+const ALPHA_UNEXPLORED = 0.88;
+const ALPHA_EXPLORED = 0.42;
 
 export class VisionGrid {
   readonly w: number;
@@ -44,9 +44,14 @@ export class VisionGrid {
   }
 
   private ensureTexture(): void {
-    if (this.scene.textures.exists(FOG_TEX)) this.scene.textures.remove(FOG_TEX);
-    const tex = this.scene.textures.createCanvas(FOG_TEX, this.w, this.h);
-    if (!tex) throw new Error('[vision] failed to create fog texture');
+    const existing = this.scene.textures.exists(FOG_TEX) ? (this.scene.textures.get(FOG_TEX) as Phaser.Textures.CanvasTexture) : null;
+    const fits = !!existing && !!existing.source[0] && existing.source[0].width === this.w && existing.source[0].height === this.h;
+    const tex = fits ? existing! : (() => {
+      if (this.scene.textures.exists(FOG_TEX)) this.scene.textures.remove(FOG_TEX);
+      const t = this.scene.textures.createCanvas(FOG_TEX, this.w, this.h);
+      if (!t) throw new Error('[vision] failed to create fog texture');
+      return t;
+    })();
     // LINEAR so the tile-resolution mask reads as soft fog instead of hard squares
     tex.setFilter(Phaser.Textures.FilterMode.LINEAR);
     this.canvasTex = tex;
@@ -54,9 +59,9 @@ export class VisionGrid {
     this.imageData = ctx.createImageData(this.w, this.h);
     for (let i = 0; i < this.w * this.h; i++) {
       const p = i * 4;
-      this.imageData.data[p] = 4;
-      this.imageData.data[p + 1] = 6;
-      this.imageData.data[p + 2] = 12;
+      this.imageData.data[p] = 6;
+      this.imageData.data[p + 1] = 9;
+      this.imageData.data[p + 2] = 18;
       this.imageData.data[p + 3] = 255 * ALPHA_UNEXPLORED;
     }
     this.paintedVersion = -1;

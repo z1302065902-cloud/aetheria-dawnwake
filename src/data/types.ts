@@ -64,13 +64,17 @@ export interface BuildingDef {
 }
 
 /** Drawing instructions consumed by art/SpriteFactory. Fully original, generated at runtime. */
+export type UnitArchetype = 'knight' | 'soldier' | 'archer' | 'mage' | 'worker' | 'orc' | 'shade' | 'beast' | 'siege';
+
 export interface ArtSpec {
   shape: 'humanoid' | 'beast' | 'tower' | 'hall' | 'tent' | 'ring' | 'shrine' | 'crystal';
+  /** drives head/body/cape styling so each unit family reads differently at a glance */
+  archetype?: UnitArchetype;
   body: number;     // main colour
   trim: number;     // secondary colour
   accent: number;   // highlight colour
   scale: number;    // relative size multiplier
-  weapon?: 'sword' | 'axe' | 'bow' | 'staff' | 'pick' | 'claw' | 'banner' | 'hammer' | 'none';
+  weapon?: 'sword' | 'axe' | 'bow' | 'staff' | 'pick' | 'claw' | 'banner' | 'hammer' | 'lance' | 'engine' | 'none';
   mount?: boolean;  // rides a beast (bigger silhouette)
   banner?: number;  // banner colour for buildings
 }

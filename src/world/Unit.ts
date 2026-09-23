@@ -77,6 +77,13 @@ export class Unit extends Entity {
   patrolPoint: { x: number; y: number } | null = null;
   aiThink = 0;
 
+  /** current animation state (idle / walk / attack / death) */
+  animState: 'idle' | 'walk' | 'attack' | 'death' | null = null;
+  /** visual-only knockback from being hit: offset + timer */
+  recoilX = 0;
+  recoilY = 0;
+  recoilT = 0;
+
   buffs: Buff[] = [];
   queue: QueuedCommand[] = [];
   /** frames without progress, used by the movement system's stuck detection */
@@ -136,6 +143,28 @@ export class Unit extends Entity {
     return this.buffs.some((b) => b.id === id && b.until > now);
   }
 
+  /** Switches the sprite animation, ignoring repeats. */
+  playAnim(state: 'idle' | 'walk' | 'attack' | 'death', restart = false): void {
+    if (!this.sprite) return;
+    if (this.animState === state && !restart) return;
+    this.animState = state;
+    const key = `u_${this.def.id}_${state}`;
+    const anims = this.sprite.scene?.anims;
+    if (anims && anims.exists(key)) {
+      this.sprite.play(key, restart);
+    }
+  }
+
+  /** Visual recoil away from an impact (does NOT move the logical position). */
+  applyRecoil(fromX: number, fromY: number, strength = 4): void {
+    const dx = this.x - fromX;
+    const dy = this.y - fromY;
+    const d = Math.hypot(dx, dy) || 1;
+    this.recoilX = (dx / d) * strength;
+    this.recoilY = (dy / d) * strength * 0.6;
+    this.recoilT = 0.18;
+  }
+
   faceTowards(x: number, y: number): void {
     this.facing = x >= this.x ? 1 : -1;
   }
@@ -162,18 +191,27 @@ export class Unit extends Entity {
   }
 
   updateSprite(dt: number): void {
-    const spr = this.sprite as Phaser.GameObjects.Image | null;
+    const spr = this.sprite;
     if (!spr) return;
-    spr.setPosition(this.x, this.y);
+
+    // ── hit recoil: visual only, decays fast (0.18s) ──
+    let recoil = 0;
+    if (this.recoilT > 0) {
+      this.recoilT = Math.max(0, this.recoilT - dt);
+      recoil = this.recoilT / 0.18;
+    }
+    spr.setPosition(this.x + this.recoilX * recoil, this.y + this.recoilY * recoil);
     spr.setDepth(100 + this.y * 0.01);
     spr.setFlipX(this.facing < 0);
-    if (this.swing > 0) {
-      this.swing = Math.max(0, this.swing - dt);
-      const t = this.swing;
-      spr.setRotation(Math.sin(t * 22) * 0.22 * (this.facing < 0 ? -1 : 1));
-    } else if (spr.rotation !== 0) {
-      spr.setRotation(0);
-    }
+    spr.setRotation(recoil * 0.16 * (this.facing < 0 ? -1 : 1));
+
+    // ── animation state machine ──
+    if (this.swing > 0) this.swing = Math.max(0, this.swing - dt);
+    if (this.dead) this.playAnim('death');
+    else if (this.swing > 0) this.playAnim('attack');
+    else if (this.path.length > 0) this.playAnim('walk');
+    else this.playAnim('idle');
+
     if (this.flash > 0) {
       this.flash = Math.max(0, this.flash - dt);
       spr.setTintFill(0xffffff);

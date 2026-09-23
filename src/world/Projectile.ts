@@ -25,6 +25,7 @@ export class Projectile {
   sprite: Phaser.GameObjects.Image | null = null;
   /** Straight-line melee-to-ranged specials (hero abilities) reuse this too. */
   trail = true;
+  trailTimer = 0;
 }
 
 export class Corpse {

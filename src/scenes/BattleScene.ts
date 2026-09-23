@@ -31,6 +31,7 @@ import { save } from '../core/SaveManager';
 import { buildModifiers, describeModifiers } from '../systems/Relics';
 import { FOG_TEX, VisionGrid } from '../systems/Vision';
 import { applyEquipmentToHero } from '../systems/Equipment';
+import { EnvironmentSystem } from '../systems/Environment';
 import { Rng } from '../core/Rng';
 import { rollLoot } from '../data/items';
 import type { MissionDef } from '../data/types';
@@ -88,6 +89,10 @@ export interface HudState {
   paused: boolean;
   ended: boolean;
   fps: number;
+  /** live boss readout (null when no boss is on the field) */
+  boss: { name: string; hp: number; maxHp: number; phase: number; visible: boolean } | null;
+  /** recent combat events, newest first */
+  feed: Array<{ text: string; kind: 'kill' | 'skill' | 'boss' | 'loss'; age: number }>;
   /** Human readable list of the live relic bonuses (shown in the pause overlay). */
   relicLines: string[];
 }
@@ -113,6 +118,7 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
   missions!: MissionSystem;
   selection!: SelectionSystem;
   vision!: VisionGrid;
+  environment!: EnvironmentSystem;
   private fogImage!: Phaser.GameObjects.Image;
   private visionTimer = 0;
 
@@ -123,6 +129,7 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
   private elapsedReal = 0;
   private hudTimer = 0;
   private fpsSamples: number[] = [];
+  private feed: Array<{ text: string; kind: 'kill' | 'skill' | 'boss' | 'loss'; age: number }> = [];
 
   // input state
   private dragging = false;
@@ -161,6 +168,7 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
     this.unsubs = [];
     this.ghost = null;
     this.visionTimer = 0;
+    this.feed = [];
 
     const missionId = data?.missionId ?? 'm01';
     this.mission = getMission(missionId);
@@ -216,12 +224,49 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
     this.ai.init(this.mission);
     for (const b of setup.enemyBuildings) this.ai.bindCampBuilding(b);
 
+    // ── animated battlefield decoration ──
+    this.environment = new EnvironmentSystem(this, this.map);
+    const torches: Array<{ x: number; y: number }> = [];
+    const banners: Array<{ x: number; y: number; color: number }> = [];
+    const ruins: Array<{ x: number; y: number }> = [];
+    for (const b of this.world.buildings) {
+      const fp = b.def.footprint;
+      if (b.def.faction === 'dawn') {
+        torches.push(...EnvironmentSystem.torchesForBuilding(b.x, b.y, fp.w, fp.h, 0xffd257));
+        banners.push({ x: b.x + (fp.w * 40) / 2 + 10, y: b.y + 12, color: b.def.art.banner ?? 0x4b6cc1 });
+      } else if (b.team === 2) {
+        torches.push({ x: b.x - (fp.w * 40) / 2 - 8, y: b.y + 14 });
+        banners.push({ x: b.x + (fp.w * 40) / 2 + 10, y: b.y + 12, color: 0xc24a2a });
+      }
+    }
+    for (const sp of this.map.searchPoints) ruins.push({ x: sp.x, y: sp.y });
+    for (const land of this.map.landings) ruins.push({ x: land.x + 26, y: land.y - 30 });
+    this.environment.vision = this.vision;
+    this.environment.build({ torches, banners, ruins });
+    this.environment.attachWaterShimmer(this.map.w * 40, this.map.h * 40);
+    this.environment.smokePuff = (x, y) =>
+      this.fx.spawn({ texture: 'fx_smoke', x, y, vy: -14, vx: (Math.random() - 0.5) * 8, life: 1.4, scale0: 0.4, scale1: 1.1, alpha0: 0.28, alpha1: 0, additive: false, tint: 0x9a9488 });
+
     // events: mission -> hud/audio
     this.world.onKilled = (entity, killerTeam) => {
       this.missions.onKilled(entity, killerTeam);
       if (entity.kind === 'unit') {
         const u = entity as Unit;
-        if (u.isHero) audio.sfx('heroDown', 0.8);
+        if (u.isHero) {
+          audio.sfx('heroDown', 0.8);
+          this.pushFeed('指挥官阵亡，30 秒后复活', 'loss');
+        } else if (u.def.ai?.kind === 'boss') {
+          this.pushFeed(`${u.def.name} 被击败`, 'boss');
+          this.bossDeathCinematic(u.x, u.y);
+        } else if (killerTeam === 1) {
+          this.pushFeed(`击杀了 ${u.def.name}`, 'kill');
+        } else if (u.team === 1) {
+          this.pushFeed(`损失了 ${u.def.name}`, 'loss');
+        }
+      } else {
+        const b = entity as Building;
+        if (killerTeam === 1) this.pushFeed(`摧毁了 ${b.def.name}`, 'kill');
+        else if (b.team === 1) this.pushFeed(`${b.def.name} 被摧毁`, 'loss');
       }
       this.checkBossSpawn();
       this.world.recomputePop();
@@ -281,9 +326,11 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
       this.visionTimer += dt;
       if (this.visionTimer >= 0.15) {
         this.visionTimer = 0;
+    this.feed = [];
         this.vision.update(this.world);
         this.vision.paint();
       }
+      this.environment.update(dt);
       this.orders.update(dt);
       this.ai.update(dt);
       this.movement.update(dt);
@@ -297,6 +344,10 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
       this.updateFacing();
     }
     this.fx.update(dt);
+    for (let i = this.feed.length - 1; i >= 0; i--) {
+      this.feed[i].age += dt;
+      if (this.feed[i].age > 6) this.feed.splice(i, 1);
+    }
     this.selection.refresh();
     this.drawOverlay();
     this.updateGhost();
@@ -333,6 +384,19 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
       g.lineStyle(2, 0x7fffb0, 0.95);
       g.strokeRect(b.x - (b.def.footprint.w * TILE) / 2 - 3, b.y - (b.def.footprint.h * TILE) / 2 - 8, b.def.footprint.w * TILE + 6, b.def.footprint.h * TILE + 12);
     }
+    // target indicator: a reticle on whatever the primary selected unit is attacking
+    const primary = this.selection.primary;
+    const target = primary && primary.targetId >= 0 ? this.world.entityById(primary.targetId) : undefined;
+    if (target && !target.dead) {
+      const r = Math.max(12, target.radius + 6);
+      const pulse = 1 + Math.sin(this.now * 6) * 0.08;
+      g.lineStyle(2, 0xff6a5a, 0.95);
+      g.strokeCircle(target.x, target.y - 8, r * pulse);
+      for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0]] as const) {
+        g.lineBetween(target.x + dx * r * pulse, target.y - 8 + dy * r * pulse, target.x + dx * (r * pulse + 6), target.y - 8 + dy * (r * pulse + 6));
+      }
+    }
+
     // health bars for damaged / selected entities
     const drawBar = (x: number, y: number, w: number, ratio: number, team: number, building: boolean) => {
       const h = building ? 6 : 4;
@@ -494,6 +558,7 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
       this.unsubs.length = 0;
       this.fx?.clear();
       this.combat?.dispose();
+      this.environment?.dispose();
       this.world?.dispose();
     });
   }
@@ -874,7 +939,52 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
       ended: this.ended,
       fps,
       relicLines: describeModifiers(w.mods),
+      boss: this.bossView(),
+      feed: this.feed.slice(0, 5),
     };
+  }
+
+  private bossView(): HudState['boss'] {
+    const boss = this.ai?.boss;
+    if (!boss || boss.dead) return null;
+    return {
+      name: boss.def.name,
+      hp: boss.hp,
+      maxHp: boss.maxHp,
+      phase: this.ai.bossPhase,
+      visible: this.world.canSee(boss.x, boss.y, 1),
+    };
+  }
+
+  /** Pushes a line into the combat feed (谁击杀了谁 / 技能命中 / Boss 动作). */
+  pushFeed(text: string, kind: 'kill' | 'skill' | 'boss' | 'loss' = 'kill'): void {
+    this.feed.unshift({ text, kind, age: 0 });
+    if (this.feed.length > 6) this.feed.length = 6;
+  }
+
+  /** Boss death: staggered explosions, dust, screen shake and a short slow-motion beat. */
+  private bossDeathCinematic(x: number, y: number): void {
+    audio.sfx('bossRoar', 0.9);
+    this.fx.shake(14, 0.7, 'ultimate');
+    this.fx.scorch(x, y, 150, false);
+    for (let i = 0; i < 7; i++) {
+      this.time.delayedCall(i * 130, () => {
+        const a = Math.random() * Math.PI * 2;
+        const r = 30 + Math.random() * 90;
+        this.fx.explosion(x + Math.cos(a) * r, y + Math.sin(a) * r * 0.6, 70 + Math.random() * 50, false);
+        audio.sfx('explosion', 0.5);
+      });
+    }
+    this.time.delayedCall(500, () => {
+      this.fx.explosion(x, y, 190, true);
+      this.fx.levelUp(x, y);
+    });
+    // slow motion: the world keeps moving, just slower, then snaps back
+    const prev = this.speed;
+    this.speed = Math.min(prev, 0.35);
+    this.time.delayedCall(1100, () => {
+      this.speed = prev;
+    });
   }
 
   private waveIndexSafe(): number {

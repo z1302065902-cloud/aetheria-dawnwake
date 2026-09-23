@@ -98,7 +98,7 @@ export const HEROES: Record<string, HeroDef> = {
     base: { hp: 480, mana: 130, attack: 28, armor: 6, moveSpeed: 132, attackRange: 32, attackCooldown: 1.0, manaRegen: 3.2, hpRegen: 1.4 },
     growth: { hp: 68, mana: 12, attack: 5, armor: 1.2 },
     skills: ['shieldCharge', 'warCry', 'whirlwind', 'divineGuard'],
-    art: { shape: 'humanoid', body: 0x3f6fd0, trim: 0xeef2ff, accent: 0xffd257, scale: 1.35, weapon: 'sword', mount: false, banner: 0xffd257 },
+    art: { archetype: 'knight', shape: 'humanoid', body: 0x3f6fd0, trim: 0xeef2ff, accent: 0xffd257, scale: 1.35, weapon: 'sword', mount: false, banner: 0xffd257 },
     bio: '王国最后的骑士指挥官。他能扛住巨兽的正面冲击，也能用战吼把溃散的阵线重新凝聚起来。',
   },
   arcaneMage: {
@@ -106,7 +106,7 @@ export const HEROES: Record<string, HeroDef> = {
     base: { hp: 300, mana: 220, attack: 34, armor: 2, moveSpeed: 122, attackRange: 195, attackCooldown: 1.35, manaRegen: 6.5, hpRegen: 0.6 },
     growth: { hp: 34, mana: 24, attack: 8, armor: 0.5 },
     skills: ['fireball', 'arcaneStorm', 'meteor', 'teleport'],
-    art: { shape: 'humanoid', body: 0x7f5fd0, trim: 0x3a2a6a, accent: 0x9ff0ff, scale: 1.22, weapon: 'staff', banner: 0x9f7fff },
+    art: { archetype: 'mage', shape: 'humanoid', body: 0x7f5fd0, trim: 0x3a2a6a, accent: 0x9ff0ff, scale: 1.22, weapon: 'staff', banner: 0x9f7fff },
     bio: '研究虚空潮汐本质的学者。她的爆炸法术能在一瞬间抹掉一整队劫掠者，前提是别让她被碰到。',
   },
   ranger: {
@@ -114,7 +114,7 @@ export const HEROES: Record<string, HeroDef> = {
     base: { hp: 340, mana: 160, attack: 31, armor: 3, moveSpeed: 142, attackRange: 215, attackCooldown: 0.9, manaRegen: 4.5, hpRegen: 0.9 },
     growth: { hp: 42, mana: 15, attack: 7, armor: 0.7 },
     skills: ['multiShot', 'snare', 'arrowRain', 'eagleEye'],
-    art: { shape: 'humanoid', body: 0x3f8f5a, trim: 0x2a4f34, accent: 0xd9ffa0, scale: 1.2, weapon: 'bow', banner: 0x9ff0a0 },
+    art: { archetype: 'archer', shape: 'humanoid', body: 0x3f8f5a, trim: 0x2a4f34, accent: 0xd9ffa0, scale: 1.2, weapon: 'bow', banner: 0x9ff0a0 },
     bio: '格林谷地长大的猎人。她熟悉每一片林子，也熟悉怎么让巨兽在箭雨里流血至死。',
   },
 };

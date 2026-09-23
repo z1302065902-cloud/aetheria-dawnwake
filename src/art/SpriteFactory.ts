@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { PAL, shade } from './Palette';
+import { layoutFor, posesFor, renderUnitStrip, type UnitSheetLayout } from './UnitRenderer';
 import { UNITS } from '../data/units';
 import { BUILDINGS } from '../data/buildings';
 import { HEROES, SKILLS } from '../data/heroes';
@@ -11,6 +12,8 @@ import type { ArtSpec } from '../data/types';
  * `texScale()` returns the display scale that maps the texture back to world size.
  */
 const SS = 2;
+/** unit sheets are big (15 frames each) so they use a lighter supersample */
+const UNIT_SS = 1.6;
 
 export const TEXTURE_SCALE: Record<string, number> = {};
 
@@ -26,13 +29,28 @@ export function metaOf(key: string): TexMeta {
   return TEX_META[key] ?? { sx: 1, sy: 0.5 };
 }
 
+const CANVAS_TEX = new Map<string, Phaser.Textures.CanvasTexture>();
+
 function ctx2d(scene: Phaser.Scene, key: string, w: number, h: number): CanvasRenderingContext2D {
-  if (scene.textures.exists(key)) scene.textures.remove(key);
-  const t = scene.textures.createCanvas(key, Math.ceil(w * SS), Math.ceil(h * SS));
-  if (!t) throw new Error(`[art] failed to create canvas texture ${key}`);
+  const pw = Math.ceil(w * SS);
+  const ph = Math.ceil(h * SS);
+  let t = CANVAS_TEX.get(key);
+  // Reuse the texture when the size matches. Removing + recreating a texture invalidates
+  // its frames, and any object still holding one crashes later with a null drawImage.
+  if (t && (!t.source[0] || t.source[0].width !== pw || t.source[0].height !== ph)) {
+    scene.textures.remove(key);
+    t = undefined;
+  }
+  if (!t || !scene.textures.exists(key)) {
+    if (scene.textures.exists(key)) scene.textures.remove(key);
+    t = scene.textures.createCanvas(key, pw, ph) ?? undefined;
+    if (!t) throw new Error(`[art] failed to create canvas texture ${key}`);
+    CANVAS_TEX.set(key, t);
+  }
   TEXTURE_SCALE[key] = 1 / SS;
   const c = t.getContext();
-  c.clearRect(0, 0, w * SS, h * SS);
+  c.setTransform(1, 0, 0, 1, 0, 0);
+  c.clearRect(0, 0, pw, ph);
   c.save();
   c.scale(SS, SS);
   c.lineJoin = 'round';
@@ -42,7 +60,8 @@ function ctx2d(scene: Phaser.Scene, key: string, w: number, h: number): CanvasRe
 
 function finish(scene: Phaser.Scene, key: string, c: CanvasRenderingContext2D): void {
   c.restore();
-  (scene.textures.get(key) as Phaser.Textures.CanvasTexture).refresh();
+  const t = CANVAS_TEX.get(key) ?? (scene.textures.get(key) as Phaser.Textures.CanvasTexture);
+  t.refresh();
 }
 
 export function texScale(key: string): number {
@@ -422,17 +441,48 @@ function drawBeast(c: CanvasRenderingContext2D, cx: number, by: number, spec: Ar
   c.restore();
 }
 
-function drawUnitTexture(scene: Phaser.Scene, key: string, spec: ArtSpec, seed: number): void {
-  const pad = 26;
-  const size = 34 * spec.scale + pad;
-  const c = ctx2d(scene, key, size, size);
-  const cx = size / 2;
-  const by = size - pad * 0.75;
-  if (spec.shape === 'beast') drawBeast(c, cx, by, spec);
-  else drawHumanoid(c, cx, by, spec, seed);
-  finish(scene, key, c);
-  // pivot at the feet so depth sorting / positioning reads correctly
-  setMeta(key, 1 / SS, by / size);
+/**
+ * Builds a spritesheet with idle/walk/attack/death frames for one unit and registers the
+ * matching Phaser animations. Replaces the old single static texture.
+ */
+function drawUnitSheet(scene: Phaser.Scene, key: string, spec: ArtSpec): UnitSheetLayout {
+  const layout = layoutFor(spec);
+  const poses = posesFor(layout);
+  const W = layout.cell * layout.count;
+  const H = layout.cell;
+  if (scene.textures.exists(key)) return layout; // already built; frames are in use
+
+  // draw the strip into an offscreen canvas, then hand it to Phaser as a spritesheet
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.ceil(W * UNIT_SS);
+  canvas.height = Math.ceil(H * UNIT_SS);
+  const c = canvas.getContext('2d');
+  if (!c) throw new Error('[art] 2d context unavailable');
+  c.lineJoin = 'round';
+  c.lineCap = 'round';
+  renderUnitStrip(c, spec, layout, poses, UNIT_SS);
+
+  scene.textures.addSpriteSheet(key, canvas as unknown as HTMLImageElement, {
+    frameWidth: Math.ceil(layout.cell * UNIT_SS),
+    frameHeight: Math.ceil(layout.cell * UNIT_SS),
+  });
+  setMeta(key, 1 / UNIT_SS, layout.originY);
+
+  const anim = (state: 'idle' | 'walk' | 'attack' | 'death', frameRate: number, repeat: number) => {
+    const animKey = `${key}_${state}`;
+    if (scene.anims.exists(animKey)) scene.anims.remove(animKey);
+    scene.anims.create({
+      key: animKey,
+      frames: layout.frames[state].map((i) => ({ key, frame: i })),
+      frameRate,
+      repeat,
+    });
+  };
+  anim('idle', 4.5, -1);
+  anim('walk', 9, -1);
+  anim('attack', 14, 0);
+  anim('death', 7, 0);
+  return layout;
 }
 
 // ─────────────────────────── buildings ───────────────────────────
@@ -677,6 +727,51 @@ function drawBuildingTexture(scene: Phaser.Scene, key: string, spec: ArtSpec, fp
     c.restore();
   }
 
+  // ── volume pass: every building gets a lit side, a shadowed side, stone courses and
+  //    warm window halos. Cheap, and it is what stops them reading as flat cut-outs. ──
+  const bodyTop = base - bh - hh * 0.62;
+  const bodyBottom = base;
+  c.save();
+  c.beginPath();
+  c.rect(left - 4, Math.max(0, bodyTop), bw + 8, bodyBottom - Math.max(0, bodyTop));
+  c.clip();
+  const lit = c.createLinearGradient(left, 0, left + bw, 0);
+  lit.addColorStop(0, 'rgba(255,246,214,0.16)');
+  lit.addColorStop(0.42, 'rgba(255,255,255,0)');
+  lit.addColorStop(1, 'rgba(8,10,20,0.34)');
+  c.fillStyle = lit;
+  c.fillRect(left - 4, Math.max(0, bodyTop), bw + 8, bodyBottom - Math.max(0, bodyTop));
+  // stone courses
+  c.strokeStyle = 'rgba(24,24,32,0.16)';
+  c.lineWidth = 1;
+  for (let y = bodyTop + 9; y < bodyBottom - 2; y += 9) {
+    c.beginPath();
+    c.moveTo(left - 2, y);
+    c.lineTo(left + bw + 2, y);
+    c.stroke();
+  }
+  c.restore();
+  // warm light spilling out of the windows
+  c.save();
+  c.globalCompositeOperation = 'lighter';
+  for (const [wx, wy] of [[cx, base - bh * 0.95], [cx, base - bh * 0.55], [cx - bw * 0.3, base - bh * 0.55], [cx + bw * 0.3, base - bh * 0.55]] as const) {
+    const halo = c.createRadialGradient(wx, wy, 1, wx, wy, 13);
+    halo.addColorStop(0, 'rgba(255,214,140,0.5)');
+    halo.addColorStop(1, 'rgba(255,190,90,0)');
+    c.fillStyle = halo;
+    c.beginPath();
+    c.arc(wx, wy, 13, 0, Math.PI * 2);
+    c.fill();
+  }
+  c.restore();
+  // ground contact shadow so the building sits on the tile instead of floating
+  c.save();
+  const contact = c.createLinearGradient(0, base - 10, 0, base + 4);
+  contact.addColorStop(0, 'rgba(0,0,0,0)');
+  contact.addColorStop(1, 'rgba(0,0,0,0.34)');
+  c.fillStyle = contact;
+  c.fillRect(left - 6, base - 10, bw + 12, 14);
+  c.restore();
   finish(scene, key, c);
   setMeta(key, 1 / SS, base / H);
 }
@@ -874,6 +969,173 @@ function drawTree(scene: Phaser.Scene, key: string, variant: number): void {
   setMeta(key, 1 / SS, (size - 5) / size);
 }
 
+/** Broken wall fragment — battlefield rubble that reads as "this place had a history". */
+function drawRuin(scene: Phaser.Scene, key: string): void {
+  const size = 52;
+  const c = ctx2d(scene, key, size, size);
+  const cx = size / 2;
+  const by = size - 5;
+  c.save();
+  c.fillStyle = 'rgba(0,0,0,0.28)';
+  c.beginPath();
+  c.ellipse(cx, by, 16, 5.5, 0, 0, Math.PI * 2);
+  c.fill();
+  c.restore();
+  // two crumbling wall stubs
+  for (const [dx, h] of [[-9, 15], [4, 21]] as const) {
+    c.save();
+    c.fillStyle = css(0x8d8b86);
+    c.beginPath();
+    c.moveTo(cx + dx - 6, by);
+    c.lineTo(cx + dx - 6, by - h);
+    c.lineTo(cx + dx - 2, by - h - 3);
+    c.lineTo(cx + dx + 4, by - h + 2);
+    c.lineTo(cx + dx + 6, by);
+    c.closePath();
+    c.fill();
+    outline(c, 1.5);
+    c.restore();
+    // stone courses
+    c.save();
+    c.strokeStyle = 'rgba(60,58,54,0.55)';
+    c.lineWidth = 1;
+    for (let i = 1; i < Math.floor(h / 6); i++) {
+      c.beginPath();
+      c.moveTo(cx + dx - 6, by - i * 6);
+      c.lineTo(cx + dx + 6, by - i * 6);
+      c.stroke();
+    }
+    c.restore();
+  }
+  // moss
+  c.save();
+  c.fillStyle = css(0x5f7a44, 0.55);
+  c.fillRect(cx - 14, by - 5, 5, 4);
+  c.fillRect(cx + 6, by - 9, 4, 3);
+  c.restore();
+  // broken pillar top lying on the ground
+  c.save();
+  c.fillStyle = css(0x7d7b76);
+  c.fillRect(cx + 10, by - 4, 12, 4);
+  outline(c, 1.3);
+  c.restore();
+  finish(scene, key, c);
+  setMeta(key, 1 / SS, (size - 5) / size);
+}
+
+/** Wall torch: flame drawn tall and thin so a flicker scale looks alive. */
+function drawTorch(scene: Phaser.Scene, key: string): void {
+  const W = 20;
+  const H = 44;
+  const c = ctx2d(scene, key, W, H);
+  const cx = W / 2;
+  const by = H - 3;
+  c.save();
+  c.fillStyle = 'rgba(0,0,0,0.3)';
+  c.beginPath();
+  c.ellipse(cx, by, 6, 2.4, 0, 0, Math.PI * 2);
+  c.fill();
+  c.restore();
+  // wooden post
+  c.save();
+  c.fillStyle = css(0x6b4f30);
+  c.fillRect(cx - 1.8, by - 22, 3.6, 22);
+  outline(c, 1.2);
+  c.restore();
+  // iron basket
+  c.save();
+  c.fillStyle = css(0x4a4a52);
+  c.beginPath();
+  c.moveTo(cx - 5, by - 22);
+  c.lineTo(cx + 5, by - 22);
+  c.lineTo(cx + 3.4, by - 27);
+  c.lineTo(cx - 3.4, by - 27);
+  c.closePath();
+  c.fill();
+  outline(c, 1.2);
+  c.restore();
+  // flame: layered teardrops
+  const flame = (sc: number, color: string, dy: number) => {
+    c.save();
+    c.fillStyle = color;
+    c.beginPath();
+    c.moveTo(cx, by - 27 - dy - 13 * sc);
+    c.quadraticCurveTo(cx + 6 * sc, by - 27 - dy - 5 * sc, cx + 3.2 * sc, by - 27 - dy);
+    c.quadraticCurveTo(cx, by - 27 - dy + 2 * sc, cx - 3.2 * sc, by - 27 - dy);
+    c.quadraticCurveTo(cx - 6 * sc, by - 27 - dy - 5 * sc, cx, by - 27 - dy - 13 * sc);
+    c.closePath();
+    c.fill();
+    c.restore();
+  };
+  flame(1, 'rgba(255,140,40,0.95)', 0);
+  flame(0.68, 'rgba(255,206,120,0.98)', 1.5);
+  flame(0.34, 'rgba(255,255,235,1)', 3);
+  finish(scene, key, c);
+  setMeta(key, 1 / SS, (by - 6) / H);
+}
+
+/** Hanging banner / war flag (tinted per faction at runtime). */
+function drawBanner(scene: Phaser.Scene, key: string): void {
+  const W = 26;
+  const H = 46;
+  const c = ctx2d(scene, key, W, H);
+  const cx = W / 2;
+  const by = H - 3;
+  c.save();
+  c.fillStyle = 'rgba(0,0,0,0.26)';
+  c.beginPath();
+  c.ellipse(cx, by, 7, 2.6, 0, 0, Math.PI * 2);
+  c.fill();
+  c.restore();
+  // pole
+  c.save();
+  c.fillStyle = css(0x5b4630);
+  c.fillRect(cx - 1.6, by - 40, 3.2, 40);
+  outline(c, 1.2);
+  c.restore();
+  // cloth with a swallow tail
+  c.save();
+  c.fillStyle = css(0xd8d8d8);
+  c.beginPath();
+  c.moveTo(cx + 1.5, by - 40);
+  c.lineTo(cx + 13, by - 36);
+  c.lineTo(cx + 8, by - 30);
+  c.lineTo(cx + 13, by - 24);
+  c.lineTo(cx + 1.5, by - 21);
+  c.closePath();
+  c.fill();
+  outline(c, 1.3);
+  c.restore();
+  // emblem
+  c.save();
+  c.fillStyle = 'rgba(30,30,40,0.75)';
+  c.beginPath();
+  c.arc(cx + 6, by - 30.5, 2.6, 0, Math.PI * 2);
+  c.fill();
+  c.restore();
+  finish(scene, key, c);
+  setMeta(key, 1 / SS, (by - 4) / H);
+}
+
+/** Tileable water shimmer (used as a scrolling additive overlay). */
+function drawWaterShimmer(scene: Phaser.Scene, key: string): void {
+  const size = 64;
+  const c = ctx2d(scene, key, size, size);
+  c.clearRect(0, 0, size, size);
+  c.strokeStyle = 'rgba(200,240,255,0.55)';
+  c.lineWidth = 1.4;
+  for (let i = 0; i < 4; i++) {
+    const y = 8 + i * 16;
+    c.beginPath();
+    c.moveTo(0, y);
+    c.quadraticCurveTo(size * 0.25, y - 4, size * 0.5, y);
+    c.quadraticCurveTo(size * 0.75, y + 4, size, y);
+    c.stroke();
+  }
+  finish(scene, key, c);
+  setMeta(key, 1 / SS, 0.5);
+}
+
 function drawRock(scene: Phaser.Scene, key: string): void {
   const size = 36;
   const c = ctx2d(scene, key, size, size);
@@ -980,13 +1242,11 @@ export function ensureTextures(scene: Phaser.Scene): void {
   if (generated) return;
   generated = true;
 
-  let seed = 1;
   for (const id of Object.keys(UNITS)) {
-    const u = UNITS[id];
-    drawUnitTexture(scene, `u_${id}`, u.art, seed++);
+    drawUnitSheet(scene, `u_${id}`, UNITS[id].art);
   }
   for (const id of Object.keys(HEROES)) {
-    drawUnitTexture(scene, `u_${id}`, HEROES[id].art, seed++);
+    drawUnitSheet(scene, `u_${id}`, HEROES[id].art);
   }
   for (const id of Object.keys(BUILDINGS)) {
     const b = BUILDINGS[id];
@@ -1008,6 +1268,10 @@ export function ensureTextures(scene: Phaser.Scene): void {
   drawSlash(scene, 'fx_slash', 0xfff2c0);
   drawSlash(scene, 'fx_slash_dark', 0xff8a5a);
 
+  drawRuin(scene, 'decor_ruin');
+  drawTorch(scene, 'decor_torch');
+  drawBanner(scene, 'decor_banner');
+  drawWaterShimmer(scene, 'water_shimmer');
   drawTree(scene, 'terrain_tree_0', 0);
   drawTree(scene, 'terrain_tree_1', 1);
   drawTree(scene, 'terrain_tree_2', 2);

@@ -109,7 +109,9 @@ export class CombatSystem implements ProjectilePoolApi {
     const world = this.ctx.world;
     const def = u.def;
     u.cooldown = def.attackCooldown / Math.max(0.35, this.attackSpeedMulOf(u));
-    u.swing = 0.22;
+    // swing window drives the attack animation (windup -> strike -> recover)
+    u.swing = 0.3;
+    u.playAnim('attack', true);
     const angle = Math.atan2(target.y - u.y, target.x - u.x);
     u.facing = Math.cos(angle) >= 0 ? 1 : -1;
 
@@ -131,7 +133,7 @@ export class CombatSystem implements ProjectilePoolApi {
 
     if (def.projectile) {
       const muzzleX = u.x + Math.cos(angle) * 12;
-      const muzzleY = u.y + Math.sin(angle) * 12 - 18;
+      const muzzleY = u.y + Math.sin(angle) * 12 - 22;
       this.ctx.fx.muzzle(muzzleX, muzzleY, angle, def.damageType !== 'magic');
       this.fire({
         x: muzzleX,
@@ -218,6 +220,11 @@ export class CombatSystem implements ProjectilePoolApi {
       }
       p.x += (dx / dist) * step;
       p.y += (dy / dist) * step;
+      p.trailTimer = (p.trailTimer ?? 0) - dt;
+      if (p.trailTimer <= 0) {
+        p.trailTimer = 0.035;
+        this.ctx.fx.trail(p.x, p.y, p.damageType === 'magic', p.splash > 0 ? 0.7 : 0.4);
+      }
       if (p.sprite) {
         p.sprite.setPosition(p.x, p.y - (p.arc ? Math.sin(((4 - p.life) / 4) * Math.PI) * p.arc : 0));
         if (p.texture === 'p_arrow' || p.texture === 'p_boulder') p.sprite.setRotation(Math.atan2(dy, dx));
@@ -263,9 +270,29 @@ export class CombatSystem implements ProjectilePoolApi {
     const dealt = world.damage(target, finalAmount, type, team, crit);
     if (dealt <= 0) return 0;
     const isEnemyOfView = target.team !== 1;
+    // hit direction: from the attacker towards the target (for spray + body recoil)
+    const attacker = ownerId >= 0 ? world.entityById(ownerId) : undefined;
+    let dirX = 0;
+    let dirY = 0;
+    if (attacker) {
+      const dx = target.x - attacker.x;
+      const dy = target.y - attacker.y;
+      const d = Math.hypot(dx, dy) || 1;
+      dirX = dx / d;
+      dirY = dy / d;
+    }
     fx.damageText(target.x, target.y - target.radius * 0.9, dealt, crit ? 'crit' : 'damage');
-    if (target.kind === 'building') fx.hit(target.x + (Math.random() - 0.5) * 24, target.y - 18, type, 0.8);
-    else fx.hit(target.x, target.y - 12, type === 'magic' ? 'magic' : 'physical', 0.8);
+    if (target.kind === 'building') {
+      fx.hit(target.x + (Math.random() - 0.5) * 24, target.y - 18, type, 0.8, dirX, dirY);
+    } else {
+      const hitY = target.y - 14;
+      if (crit) fx.critBurst(target.x, hitY, dirX, dirY);
+      fx.hit(target.x, hitY, type === 'magic' ? 'magic' : 'physical', crit ? 1.4 : 0.8, dirX, dirY);
+      // body recoil: pushed away from the attacker, purely visual
+      (target as Unit).applyRecoil(target.x - dirX * 20, target.y - dirY * 20, crit ? 6 : 3.5);
+      if (type === 'magic') fx.shake(1.2, 0.08, 'light');
+      else if (crit) fx.shake(2.2, 0.1, 'light');
+    }
     if (isEnemyOfView && target.team !== 3) {
       this.retaliate(target, ownerId);
     }
