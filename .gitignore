@@ -2,5 +2,7 @@ node_modules/
 dist/
 dist-*/
 *.log
+# keep archived verification evidence (see docs/SESSION-HANDOFF.md)
+!artifacts/verification/*.log
 .DS_Store
 .vite/

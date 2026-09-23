@@ -1,0 +1,62 @@
+PASS  boot: Phaser game object created — 6368 ms
+PASS  menu: title + 5 main actions rendered — texts=10 rects=5
+PASS  menu: start button located — {"x":800,"y":378}
+PASS  battle: scene created + HUD launched
+PASS  battle: entities spawned (player/enemy/neutral/resources) — {"units":32,"playerUnits":5,"buildings":14,"resources":13,"gold":420,"wood":320,"enemies":20,"neutrals":7,"objectives":8,"hero":true}
+PASS  battle: hero present
+PASS  input: drag box selects player units — {"count":5,"workers":4}
+PASS  economy: workers harvest and bank gold — {"gold":255,"gatherStates":["gatherGo","gatherGo","gatherGo","move","move","move"]}
+PASS  hud: build button present for a worker selection — 兵营 150金 100木
+PASS  build: barracks site placed by clicking the ground — {"building":true,"construction":0.02}
+PASS  build: settlers are assigned to the site — [{"st":"buildGo","bid":67,"d":336},{"st":"buildGo","bid":67,"d":308},{"st":"buildGo","bid":67,"d":283},{"st":"returnGo","bid":-1,"d":2724},{"st":"returnGo","bid":-1,"d":1949},{"st":"gatherGo","bid":-1,"d":740}]
+PASS  build: settlers finish construction — {"building":false,"construction":1,"builders":0,"workers":[{"st":"idle","bid":-1,"d":121,"held":true},{"st":"idle","bid":-1,"d":122,"held":true},{"st":"idle","bid":-1,"d":78,"held":true},{"st":"returnGo","bid":-1,"d":2685,"held":true}],"held":4,"speed":8,"wallet":{"gold":105,"wood":220}}
+PASS  production: barracks accepts a training order — {"res":"ok","queued":1,"before":0,"gold":510}
+PASS  production: trained unit exists and population is counted — {"footmen":2,"popUsed":9,"popMax":24}
+PASS  combat: army ordered to attack-move onto the camp — {"army":2,"campX":2060,"campY":700,"enemiesBefore":18}
+PASS  combat: kills registered / hero gained XP or took damage — {"killed":1,"heroXp":131,"heroLevel":2,"heroHp":0,"enemyNear":0,"buildingsDestroyed":[]}
+PASS  hero: death starts a respawn timer and the hero comes back — {"dead":true,"respawning":true,"timer":24,"hp":0}
+PASS  hero: whirlwind casts and starts a channel — {"res":{"ok":true},"before":0,"after":14,"channelling":true,"level":2,"mana":142,"skills":[{"id":"shieldCharge","cd":0,"mana":15},{"id":"warCry","cd":0,"mana":20},{"id":"whirlwind","cd":0,"mana":25},{"id":"divineGuard","cd":0,"mana":40}]}
+PASS  hero: shield charge moves the hero toward the target — {"res":{"ok":true},"x0":580,"y0":500} -> {"x":780,"y":620}
+PASS  ai: wave timer runs — {"waveIndex":0,"nextIn":999999682,"elapsed":318}
+PASS  boss: spawns when the camp objective completes — {"campDestroyed":1,"bossSpawned":true,"objectives":["active","pending","pending","pending","pending","failed","active","active"],"boss":{"hp":2900,"x":2020,"y":2100,"phase":1}}
+PASS  boss: takes damage from the army and can summon minions — {"bossHp":2659,"maxHp":2900,"phase":1,"summons":18}
+PASS  mission: victory triggers when all main objectives are complete — {"ended":true,"victory":true,"objectives":[{"text":"采集 400 金币","state":"done"},{"text":"建造一座兵营","state":"done"},{"text":"训练 4 名战斗单位","state":"done"},{"text":"摧毁荒野氏族营地","state":"done"},{"text":"击败棘齿巨兽","state":"done"},{"text":"可选：指挥官全程未阵亡","state":"failed"},{"text":"可选：占领中央魔法神龛","state":"active"},{"text":"可选：探索西南方的古老立石","state":"active"}],"bossAlive":false}
+PASS  audio: victory switches to the victory track — track = victory
+PASS  ui: result panel offers a retry button
+PASS  ui: retry restarts a clean match
+PASS  mission: losing the castle ends in defeat — {"castleGone":true,"ended":true,"defeat":true}
+PASS  audio: defeat switches to the defeat track — track = defeat
+PASS  relics: save -> live match modifiers — {"mods":{"fireDamage":0.1,"meleeHp":0.08,"buildingHp":0,"goldGain":0,"heroDamage":0.12,"unitSpeed":0.06,"harvestRate":0.15,"cooldownMul":1},"hudLines":["魔法伤害 +10%","近战单位生命 +8%","英雄伤害 +12%","部队移动速度 +6%"]}
+PASS  relics: flame relic gives +10% magic damage — boosted 110.92 vs plain 100.83 → ×1.100
+PASS  relics: warrior relic gives melee units +8% max HP (150→162) — {"footmanMax":162,"archerMax":92}
+PASS  audio: all five music tracks (menu/battle/boss/victory/defeat) are switchable — ["menu","battle","boss","victory","defeat"]
+PASS  loot: a victory drops equipment into the save inventory — 2 → 5 items: ["towerShield","shortSword","voidSigil","thornCrown","stormAmulet"]
+PASS  loot: the result panel lists what dropped — ["完成任务：1　可选完成：1　失败：0\n获得金币：270　英雄经验：120\n战利品：虚空印记、荆棘王冠、风暴护符（可在「英雄 / 装备」里换上）\n进度已保存到本地存档。"]
+PASS  equipment: test fixture written (a legendary weapon is available) — {"inventory":6}
+PASS  equipment: the inventory row for the legendary weapon is rendered — {"x":962.6666666666665,"y":479,"item":"破潮之矛"}
+PASS  equipment: clicking 装备 writes the slot into the save — {"weapon":"tidePiercer","attack":34}
+PASS  equipment: the hero in-match carries the item stats (attack 34 / crit 14 / skill 18) — {"equipAttack":34,"equipCrit":14,"equipSkill":18,"attackTotal":62,"baseAttack":28}
+PASS  talents: test fixture written (3 points, no relics) — {"points":3}
+PASS  talents: the 烈焰精研 talent row has a + button — {"x":1376,"y":379}
+PASS  talents: clicking + spends exactly one point and records the rank — {"points":2,"ranks":{"flameMastery":1}}
+PASS  talents: the bought rank is live in the match (+6% magic damage) — mods.fireDamage 0.06 · 106.88 vs 100.83 = ×1.060 · HUD: ["魔法伤害 +6%"]
+PASS  fog: the checks ran on a live match — live
+PASS  fog: fog texture exists at tile resolution — [72,72]
+PASS  fog: the starting base is visible, the enemy camp is not — base true · camp visible false / explored false
+PASS  fog: enemy units outside vision are not rendered — 6 enemies at the camp, all sprites hidden
+PASS  fog: player units are always rendered
+PASS  fog: only a small part of the map starts explored — 405 / 5184 tiles explored · 405 visible
+PASS  fog: the explore objective is NOT complete before exploring — active
+PASS  fog: the explore objective completes when the stones come into vision — {"stonesVisible":true,"objectiveState":"done","exploredAfter":460}
+PASS  fog: explored ground is remembered after leaving (visible=false, explored=true) — {"nowVisible":false,"stillExplored":true,"exploredTiles":462}
+PASS  formation: 20 units ordered across the bridge — {"west":{"x":1180,"y":1860},"east":{"x":1580,"y":1860}}
+PASS  formation: no two units overlap closer than 0.8×(r1+r2) after crossing — worst gap ratio 0.96 (dist/radii [21,22]) · arrived 17/20 · east 17
+PASS  formation: the squad actually crossed the bridge — east side 17/20 · arrived 17 · still pathing 2
+PASS  performance: 240 real sim ticks ran — 16.03s of simulation advanced
+PASS  performance: simulation tick under 8ms with 100+ units — 0.205 ms/tick · 85 units · 0 projectiles
+PASS  performance: texture count stays within budget (no runaway texture creation) — 234 textures · 880 display objects in the battle scene
+PASS  performance: no frame stall over 250ms (software rasteriser) — avg 31.8ms worst 33.5ms · 84 units
+PASS  save: progress persisted to localStorage — {"exists":true,"unlocked":["m01","m02"],"victories":2}
+PASS  console: no page errors during the whole session
+
+60/60 checks passed, 0 failed
