@@ -14,6 +14,7 @@ import { isWalkable, tileAt, worldToTile, type GeneratedMap } from './MapGen';
 import { Pathfinder } from '../systems/Pathfinder';
 import type { FxSystem } from '../fx/FxSystem';
 import { emptyModifiers, type MatchModifiers } from '../systems/Relics';
+import type { VisionGrid } from '../systems/Vision';
 
 const ARMOR_MATRIX: Record<string, Record<string, number>> = {
   physical: { light: 1.12, medium: 1.0, heavy: 0.82, fortified: 0.7 },
@@ -45,6 +46,8 @@ export class World {
   wallet: Record<ResourceId, number> = { gold: 0, wood: 0, mana: 0 };
   /** Live Roguelite relic bonuses for this match (set by the battle scene). */
   mods: MatchModifiers = emptyModifiers();
+  /** Fog of war (set by the battle scene; null = everything visible, used by tests). */
+  vision: VisionGrid | null = null;
   popUsed = 0;
   popMax = CFG.POP_BASE;
   elapsed = 0;
@@ -431,6 +434,35 @@ export class World {
     for (const u of this.units) u.updateSprite(dt);
     for (const b of this.buildings) b.updateSprite(dt);
     for (const r of this.resources) r.updateSprite(0);
+    if (this.vision) this.applyFog();
+  }
+
+  /**
+   * Enemies are only rendered while actually visible; enemy buildings stay on screen
+   * once their tile has been explored (classic RTS "remembered building" behaviour).
+   * The fog overlay alone would hide them, but health bars / rings draw above it.
+   */
+  private applyFog(): void {
+    const v = this.vision!;
+    for (const u of this.units) {
+      if (!u.sprite || u.team === 1) continue;
+      u.sprite.setVisible(v.isVisibleWorld(u.x, u.y));
+    }
+    for (const b of this.buildings) {
+      if (!b.sprite || b.team === 1) continue;
+      b.sprite.setVisible(v.isExploredWorld(b.x, b.y));
+    }
+    for (const r of this.resources) {
+      if (!r.sprite) continue;
+      r.sprite.setVisible(v.isExploredWorld(r.x, r.y));
+    }
+  }
+
+  /** Player-side targeting must respect vision; the AI is exempt (it is the defender). */
+  canSee(x: number, y: number, team: number): boolean {
+    if (team !== 1) return true;
+    if (!this.vision) return true;
+    return this.vision.isVisibleWorld(x, y);
   }
 
   /** Removes depleted nodes. Called once per second (not per frame). */

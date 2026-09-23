@@ -34,6 +34,7 @@ export const MISSIONS: MissionDef[] = [
       { id: 'o5', text: '击败棘齿巨兽', kind: 'boss', target: { unitId: 'thornmaw' } },
       { id: 'o6', text: '可选：指挥官全程未阵亡', kind: 'survive', optional: true, target: { count: 1 }, reward: { gold: 120, xp: 80 } },
       { id: 'o7', text: '可选：占领中央魔法神龛', kind: 'collect', optional: true, target: { tag: 'neutral_shrine', count: 1 }, reward: { gold: 90, relic: 'flameRelic' } },
+      { id: 'o8', text: '可选：探索西南方的古老立石', kind: 'explore', optional: true, target: { tag: 'search' }, reward: { gold: 80, xp: 60 } },
     ],
     waves: { firstAt: 150, interval: 105, growth: 1.15, max: 9, units: ['raider', 'hunter', 'direwolf'] },
     enemyCamps: [

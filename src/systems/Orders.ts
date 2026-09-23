@@ -251,6 +251,7 @@ export class OrderSystem implements OrderApi {
       // workers only fight back against things already hitting them
       return null;
     }
-    return world.nearestEnemy(u.x, u.y, radius, u.team);
+    // fog: the player cannot auto-attack something it cannot see
+    return world.nearestEnemy(u.x, u.y, radius, u.team, (e) => world.canSee(e.x, e.y, u.team));
   }
 }

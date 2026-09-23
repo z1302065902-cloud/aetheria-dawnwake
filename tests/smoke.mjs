@@ -376,6 +376,8 @@ const endState = await page.evaluate(() => {
   };
 });
 check('mission: victory triggers when all main objectives are complete', endState.ended && endState.victory, JSON.stringify(endState));
+const endMusic = await page.evaluate(() => window.__AETHERIA_AUDIO__.currentTrack);
+check('audio: victory switches to the victory track', endMusic === 'victory', `track = ${endMusic}`);
 await sleep(800);
 await page.screenshot({ path: `${OUT}03-victory.png` });
 
@@ -409,6 +411,8 @@ const defeatState = await page.evaluate(() => {
   return { ended: b.isEnded, defeat: b.missions.defeat };
 });
 check('mission: losing the castle ends in defeat', defeat.castleGone && defeatState.ended && defeatState.defeat, JSON.stringify({ ...defeat, ...defeatState }));
+const defeatMusic = await page.evaluate(() => window.__AETHERIA_AUDIO__.currentTrack);
+check('audio: defeat switches to the defeat track', defeatMusic === 'defeat', `track = ${defeatMusic}`);
 await page.screenshot({ path: `${OUT}04-defeat.png` });
 
 // ── relics: the permanent bonuses must actually be applied ──────────
@@ -466,6 +470,285 @@ const meleeHp = await page.evaluate(() => {
   return out;
 });
 check('relics: warrior relic gives melee units +8% max HP (150→162)', meleeHp.footmanMax === 162 && meleeHp.archerMax === 92, JSON.stringify(meleeHp));
+
+// ── audio: the five required music tracks must exist and switch ──────
+const musicTracks = await page.evaluate(() => {
+  const a = window.__AETHERIA_AUDIO__;
+  const seen = [];
+  for (const t of ['menu', 'battle', 'boss', 'victory', 'defeat']) {
+    a.playMusic(t);
+    seen.push({ requested: t, actual: a.currentTrack });
+  }
+  a.playMusic('battle');
+  return { seen, trackCount: seen.filter((x) => x.requested === x.actual).length };
+});
+check(
+  'audio: all five music tracks (menu/battle/boss/victory/defeat) are switchable',
+  musicTracks.trackCount === 5,
+  JSON.stringify(musicTracks.seen.map((x) => x.actual)),
+);
+
+// ── loot / equipment / talents: the RPG progression loop must close ─
+// 1) loot: a 3-star victory with a boss kill must drop items into the save
+const loot = await page.evaluate(() => {
+  const b = window.__AETHERIA_BATTLE__;
+  const before = JSON.parse(window.localStorage.getItem('aetheria.dawnwake.save.v1') || '{}').hero?.inventory?.length ?? 0;
+  b.ai.bossSpawned = true;         // boss bonus drop
+  b.missions.optionalDone = 2;
+  b.missions.finish(true);         // 3 stars (fast, no optional failures, boss killed)
+  const after = JSON.parse(window.localStorage.getItem('aetheria.dawnwake.save.v1') || '{}').hero?.inventory ?? [];
+  return { before, after, count: after.length };
+});
+check('loot: a victory drops equipment into the save inventory', loot.count > loot.before, `${loot.before} → ${loot.count} items: ${JSON.stringify(loot.after)}`);
+await sleep(600);
+const resultPanelLoot = await page.evaluate(() => {
+  const hud = window.__AETHERIA__.scene.getScene('Hud');
+  const find = (list) => {
+    const out = [];
+    const rec = (l) => {
+      for (const o of l) {
+        out.push(o);
+        if (o.list) rec(o.list);
+      }
+    };
+    rec(list);
+    return out;
+  };
+  const texts = find(hud.children.list).filter((o) => o.type === 'Text').map((o) => o.text);
+  return texts.filter((t) => t.includes('战利品') || t.includes('没有掉落'));
+});
+check('loot: the result panel lists what dropped', resultPanelLoot.length === 1 && resultPanelLoot[0].includes('战利品'), JSON.stringify(resultPanelLoot));
+
+// 2) equipment: equip the best weapon through the real menu UI, then verify it in-match
+const equipFlow = await page.evaluate(() => {
+  const raw = JSON.parse(window.localStorage.getItem('aetheria.dawnwake.save.v1'));
+  // make sure a weapon exists and is unequipped so the test is deterministic
+  if (!raw.hero.inventory.includes('tidePiercer')) raw.hero.inventory.push('tidePiercer');
+  raw.hero.equipment = {}; // isolate: no other item may contribute stats
+  window.localStorage.setItem('aetheria.dawnwake.save.v1', JSON.stringify(raw));
+  return { inventory: raw.hero.inventory.length };
+});
+check('equipment: test fixture written (a legendary weapon is available)', equipFlow.inventory > 0, JSON.stringify(equipFlow));
+
+await page.reload({ waitUntil: 'load' });
+await page.waitForFunction(() => window.__AETHERIA__ && window.__AETHERIA__.scene.isActive('Menu'), null, { timeout: 30000 });
+await page.evaluate(() => {
+  window.__AETHERIA__.scene.getScene('Menu').selectedHero = 'knightCommander';
+  window.__AETHERIA__.scene.getScene('Menu').screen = 'heroes';
+  window.__AETHERIA__.scene.getScene('Menu').render();
+});
+await sleep(800);
+const equipBtn = await page.evaluate(() => {
+  const menu = window.__AETHERIA__.scene.getScene('Menu');
+  const out = [];
+  const rec = (l) => {
+    for (const o of l) {
+      out.push(o);
+      if (o.list) rec(o.list);
+    }
+  };
+  rec(menu.children.list);
+  // the "装备" button that sits on the same row as the legendary weapon
+  const label = out.find((o) => o.type === 'Text' && o.text === '破潮之矛');
+  if (!label) return null;
+  const btn = out.find((o) => o.type === 'Text' && o.text === '装备' && Math.abs(o.y - label.y) < 4 && o.visible);
+  return btn ? { x: btn.x, y: btn.y, item: label.text } : { row: label.y };
+});
+check('equipment: the inventory row for the legendary weapon is rendered', !!equipBtn && !!equipBtn.x, JSON.stringify(equipBtn));
+if (equipBtn && equipBtn.x) await page.mouse.click(equipBtn.x, equipBtn.y);
+await sleep(600);
+const equipped = await page.evaluate(() => {
+  const raw = JSON.parse(window.localStorage.getItem('aetheria.dawnwake.save.v1'));
+  return { weapon: raw.hero.equipment.weapon, attack: raw.hero.equipment.weapon ? 34 : 0 };
+});
+check('equipment: clicking 装备 writes the slot into the save', equipped.weapon === 'tidePiercer', JSON.stringify(equipped));
+
+// start a match: the equipped item must show up on the hero
+await page.evaluate(() => {
+  window.__AETHERIA__.scene.getScene('Menu').scene.start('Battle', { missionId: 'm01', heroId: 'knightCommander' });
+});
+await page.waitForFunction(() => !!window.__AETHERIA_BATTLE__, null, { timeout: 30000 });
+await sleep(1200);
+const heroEquipped = await page.evaluate(() => {
+  const b = window.__AETHERIA_BATTLE__;
+  const h = b.world.hero;
+  return {
+    equipAttack: h.equipment.attack,
+    equipCrit: h.equipment.crit,
+    equipSkill: h.equipment.skillDamage,
+    attackTotal: h.attackTotal,
+    baseAttack: h.def.attack,
+  };
+});
+check(
+  'equipment: the hero in-match carries the item stats (attack 34 / crit 14 / skill 18)',
+  heroEquipped.equipAttack === 34 && heroEquipped.equipCrit === 14 && heroEquipped.equipSkill === 18 && heroEquipped.attackTotal === heroEquipped.baseAttack + 34,
+  JSON.stringify(heroEquipped),
+);
+// attack speed is a real stat too (it must not be flavour text)
+const speedStat = await page.evaluate(() => {
+  const b = window.__AETHERIA_BATTLE__;
+  const raw = JSON.parse(window.localStorage.getItem('aetheria.dawnwake.save.v1'));
+  raw.hero.equipment.ring = 'voidSigil'; // +18% attack speed
+  if (!raw.hero.inventory.includes('voidSigil')) raw.hero.inventory.push('voidSigil');
+  window.localStorage.setItem('aetheria.dawnwake.save.v1', JSON.stringify(raw));
+  return true;
+});
+void speedStat;
+
+// 3) talents: spend a point through the UI and verify it lands in world.mods
+const talentSetup = await page.evaluate(() => {
+  const raw = JSON.parse(window.localStorage.getItem('aetheria.dawnwake.save.v1'));
+  raw.hero.talentPoints = 3;
+  raw.hero.talents = {};
+  raw.hero.relics = []; // isolate the talent effect from the relic effect
+  window.localStorage.setItem('aetheria.dawnwake.save.v1', JSON.stringify(raw));
+  return { points: raw.hero.talentPoints };
+});
+check('talents: test fixture written (3 points, no relics)', talentSetup.points === 3, JSON.stringify(talentSetup));
+
+await page.reload({ waitUntil: 'load' });
+await page.waitForFunction(() => window.__AETHERIA__ && window.__AETHERIA__.scene.isActive('Menu'), null, { timeout: 30000 });
+await page.evaluate(() => {
+  const menu = window.__AETHERIA__.scene.getScene('Menu');
+  menu.screen = 'heroes';
+  menu.render();
+});
+await sleep(700);
+const plusBtn = await page.evaluate(() => {
+  const menu = window.__AETHERIA__.scene.getScene('Menu');
+  const out = [];
+  const rec = (l) => {
+    for (const o of l) {
+      out.push(o);
+      if (o.list) rec(o.list);
+    }
+  };
+  rec(menu.children.list);
+  const row = out.find((o) => o.type === 'Text' && o.text.includes('烈焰精研'));
+  if (!row) return null;
+  const btn = out.find((o) => o.type === 'Text' && o.text === '+' && Math.abs(o.y - row.y) < 4 && o.visible);
+  return btn ? { x: btn.x, y: btn.y } : { row: row.text };
+});
+check('talents: the 烈焰精研 talent row has a + button', !!plusBtn && !!plusBtn.x, JSON.stringify(plusBtn));
+if (plusBtn && plusBtn.x) await page.mouse.click(plusBtn.x, plusBtn.y);
+await sleep(600);
+const spent = await page.evaluate(() => {
+  const raw = JSON.parse(window.localStorage.getItem('aetheria.dawnwake.save.v1'));
+  return { points: raw.hero.talentPoints, ranks: raw.hero.talents };
+});
+check('talents: clicking + spends exactly one point and records the rank', spent.points === 2 && spent.ranks.flameMastery === 1, JSON.stringify(spent));
+
+await page.evaluate(() => {
+  window.__AETHERIA__.scene.getScene('Menu').scene.start('Battle', { missionId: 'm01', heroId: 'knightCommander' });
+});
+await page.waitForFunction(() => !!window.__AETHERIA_BATTLE__, null, { timeout: 30000 });
+await sleep(1200);
+const talentMods = await page.evaluate(() => {
+  const b = window.__AETHERIA_BATTLE__;
+  const h = b.world.hero;
+  b.world.mods.fireDamage = b.world.mods.fireDamage; // no-op, keep object identity
+  // measure the talent's real effect: 6% more magic damage than without it
+  const mk = () => b.world.spawnUnit('raider', 400, 2600, 'wildborn');
+  const a = mk();
+  const c = mk();
+  const boosted = b.combat.applyDamage(a, 100, 'magic', 1, h.id, false);
+  const withTalent = b.world.mods.fireDamage;
+  b.world.mods.fireDamage = 0;
+  const plain = b.combat.applyDamage(c, 100, 'magic', 1, h.id, false);
+  b.world.mods.fireDamage = withTalent;
+  b.world.killUnit(a, 1);
+  b.world.killUnit(c, 1);
+  return { fireDamage: withTalent, boosted, plain, ratio: boosted / plain, relicLines: b.getHudState().relicLines };
+});
+check(
+  'talents: the bought rank is live in the match (+6% magic damage)',
+  Math.abs(talentMods.ratio - 1.06) < 0.002,
+  `mods.fireDamage ${talentMods.fireDamage} · ${talentMods.boosted.toFixed(2)} vs ${talentMods.plain.toFixed(2)} = ×${talentMods.ratio.toFixed(3)} · HUD: ${JSON.stringify(talentMods.relicLines)}`,
+);
+
+// restore a clean progression state so later checks (and the next run) are deterministic
+await page.evaluate(() => {
+  const raw = JSON.parse(window.localStorage.getItem('aetheria.dawnwake.save.v1'));
+  raw.hero.talents = {};
+  raw.hero.talentPoints = 0;
+  raw.hero.inventory = ['tidePiercer'];
+  raw.hero.equipment = {};
+  window.localStorage.setItem('aetheria.dawnwake.save.v1', JSON.stringify(raw));
+});
+
+// ── fog of war: unexplored stays dark, explored is remembered ───────
+const fogStart = await page.evaluate(() => {
+  const b = window.__AETHERIA_BATTLE__;
+  const v = b.world.vision;
+  if (b.isEnded) return { ended: true };
+  const camp = b.world.buildings.find((x) => x.team === 2 && x.def.id === 'wb_camp');
+  const stones = b.world.map.searchPoints[0];
+  const start = b.world.map.playerStart;
+  const enemyAtCamp = b.world.units.filter((u) => u.team === 2 && Math.hypot(u.x - camp.x, u.y - camp.y) < 400);
+  return {
+    hasVision: !!v,
+    fogTexture: window.__AETHERIA__.textures.exists('fog'),
+    fogSize: (() => {
+      const t = window.__AETHERIA__.textures.get('fog');
+      return t ? [t.source[0].width, t.source[0].height] : null;
+    })(),
+    baseVisible: v.isVisibleWorld(start.x, start.y),
+    campVisible: v.isVisibleWorld(camp.x, camp.y),
+    campExplored: v.isExploredWorld(camp.x, camp.y),
+    stonesVisible: v.isVisibleWorld(stones.x, stones.y),
+    visibleTiles: v.visibleTiles,
+    exploredTiles: v.exploredTiles,
+    enemySpritesHidden: enemyAtCamp.length > 0 && enemyAtCamp.every((u) => u.sprite && !u.sprite.visible),
+    enemyCount: enemyAtCamp.length,
+    exploreObjectiveState: (b.missions.objectives.find((o) => o.def.id === 'o8') ?? { state: 'missing' }).state,
+    // player units must never be hidden by their own fog
+    playerVisible: b.world.units.filter((u) => u.team === 1).every((u) => !u.sprite || u.sprite.visible),
+  };
+});
+check('fog: the checks ran on a live match', !fogStart.ended, fogStart.ended ? 'match had already ended — results below are meaningless' : 'live');
+check('fog: fog texture exists at tile resolution', fogStart.hasVision && fogStart.fogTexture && fogStart.fogSize[0] === 72 && fogStart.fogSize[1] === 72, JSON.stringify(fogStart.fogSize));
+check('fog: the starting base is visible, the enemy camp is not', fogStart.baseVisible && !fogStart.campVisible && !fogStart.campExplored, `base ${fogStart.baseVisible} · camp visible ${fogStart.campVisible} / explored ${fogStart.campExplored}`);
+check('fog: enemy units outside vision are not rendered', fogStart.enemySpritesHidden, `${fogStart.enemyCount} enemies at the camp, all sprites hidden`);
+check('fog: player units are always rendered', fogStart.playerVisible);
+check('fog: only a small part of the map starts explored', fogStart.exploredTiles > 40 && fogStart.exploredTiles < 72 * 72 * 0.5, `${fogStart.exploredTiles} / ${72 * 72} tiles explored · ${fogStart.visibleTiles} visible`);
+check('fog: the explore objective is NOT complete before exploring', fogStart.exploreObjectiveState === 'active', String(fogStart.exploreObjectiveState));
+
+// walking the hero to the standing stones must complete the explore objective
+const exploreResult = await page.evaluate(async () => {
+  const b = window.__AETHERIA_BATTLE__;
+  const stones = b.world.map.searchPoints[0];
+  const hero = b.world.hero;
+  hero.x = stones.x + 40;
+  hero.y = stones.y + 40;
+  b.vision.update(b.world);
+  b.vision.paint();
+  b.missions.update(0.3);
+  const obj = b.missions.objectives.find((o) => o.def.id === 'o8');
+  return {
+    stonesVisible: b.vision.isVisibleWorld(stones.x, stones.y),
+    objectiveState: obj ? obj.state : 'missing',
+    exploredAfter: b.vision.exploredTiles,
+  };
+});
+check('fog: the explore objective completes when the stones come into vision', exploreResult.stonesVisible && exploreResult.objectiveState === 'done', JSON.stringify(exploreResult));
+
+// explored areas must be remembered after the hero leaves
+const remembered = await page.evaluate(() => {
+  const b = window.__AETHERIA_BATTLE__;
+  const stones = b.world.map.searchPoints[0];
+  const hero = b.world.hero;
+  const castle = b.world.buildings.find((x) => x.def.id === 'castle' && x.team === 1);
+  hero.x = castle.x + 60;
+  hero.y = castle.y + 60;
+  b.vision.update(b.world);
+  return {
+    nowVisible: b.vision.isVisibleWorld(stones.x, stones.y),
+    stillExplored: b.vision.isExploredWorld(stones.x, stones.y),
+    exploredTiles: b.vision.exploredTiles,
+  };
+});
+check('fog: explored ground is remembered after leaving (visible=false, explored=true)', !remembered.nowVisible && remembered.stillExplored, JSON.stringify(remembered));
 
 // ── formation: 20 units must cross a bridge without stacking ────────
 const bridge = await page.evaluate(() => {

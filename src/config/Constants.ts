@@ -51,6 +51,8 @@ export const DEPTH = {
   ENTITY: 100,
   HEALTHBAR: 160,
   PROJECTILE: 180,
+  /** fog sits above entities/bars so nothing leaks through it, below FX/UI */
+  FOG: 190,
   FX: 200,
   DRAG: 300,
 };

@@ -8,16 +8,25 @@ export type SfxName =
   | 'build' | 'buildDone' | 'harvest' | 'deposit' | 'levelUp' | 'skill' | 'bossRoar'
   | 'bossSlam' | 'unitReady' | 'click' | 'error' | 'select' | 'victory' | 'defeat' | 'heroDown' | 'heroRevive';
 
-export type MusicTrack = 'none' | 'menu' | 'battle' | 'boss';
+export type MusicTrack = 'none' | 'menu' | 'battle' | 'boss' | 'victory' | 'defeat';
 
 const SCALES: Record<string, number[]> = {
   // minor pentatonic-ish, sounds "epic fantasy" without being a copy of anything
   menu: [0, 3, 5, 7, 10],
   battle: [0, 2, 3, 7, 8, 10],
   boss: [0, 1, 5, 6, 8, 11],
+  // major pentatonic for the win, natural minor for the loss
+  victory: [0, 2, 4, 7, 9],
+  defeat: [0, 2, 3, 5, 7],
 };
 
-const ROOTS: Record<string, number> = { menu: 220, battle: 174.6, boss: 146.8 };
+const ROOTS: Record<string, number> = {
+  menu: 220,
+  battle: 174.6,
+  boss: 146.8,
+  victory: 261.6,
+  defeat: 130.8,
+};
 
 class AudioBusImpl {
   private ctx: AudioContext | null = null;
@@ -236,7 +245,8 @@ class AudioBusImpl {
 
   private scheduler(): void {
     if (!this.ctx || this.track === 'none' || this.muted) return;
-    const bpm = this.track === 'boss' ? 138 : this.track === 'battle' ? 116 : 84;
+    const bpm =
+      this.track === 'boss' ? 138 : this.track === 'battle' ? 116 : this.track === 'victory' ? 104 : this.track === 'defeat' ? 66 : 84;
     const stepDur = 60 / bpm / 2; // 8th notes
     while (this.nextNoteTime < this.ctx.currentTime + 0.25) {
       this.scheduleStep(this.step, this.nextNoteTime);
@@ -280,7 +290,16 @@ class AudioBusImpl {
       note(base + 7, 1.6, 0.12, 'triangle', 1);
     }
     // lead melody (deterministic pseudo-random walk so each track feels different)
-    const melodyPattern = track === 'boss' ? [0, 2, 4, 3, 1, 5] : track === 'battle' ? [0, 3, 1, 4, 2, 5] : [0, 2, 4, 2];
+    const melodyPattern =
+      track === 'boss'
+        ? [0, 2, 4, 3, 1, 5]
+        : track === 'battle'
+          ? [0, 3, 1, 4, 2, 5]
+          : track === 'victory'
+            ? [0, 1, 2, 4, 3, 2]
+            : track === 'defeat'
+              ? [0, 1, 2, 1]
+              : [0, 2, 4, 2];
     if (beat % 2 === 0 && (beat % 8 !== 6 || track !== 'menu')) {
       const idx = (step * 7 + bar * 3) % melodyPattern.length;
       const semi = scale[melodyPattern[idx] % scale.length] + (beat >= 8 ? 0 : 0);
@@ -302,7 +321,7 @@ class AudioBusImpl {
       src.start(time);
       src.stop(time + 0.3);
     }
-    if (this.noiseBuffer && track !== 'menu' && beat % 4 === 2) {
+    if (this.noiseBuffer && track !== 'menu' && track !== 'defeat' && beat % 4 === 2) {
       const src = this.ctx.createBufferSource();
       src.buffer = this.noiseBuffer;
       const f = this.ctx.createBiquadFilter();
@@ -322,6 +341,14 @@ class AudioBusImpl {
   get ready(): boolean {
     return this.ctx !== null;
   }
+
+  /** Currently selected music track (used by tests / debug). */
+  get currentTrack(): MusicTrack {
+    return this.track;
+  }
+
+  /** All music tracks the synthesizer knows about. */
+  static readonly TRACKS: MusicTrack[] = ['menu', 'battle', 'boss', 'victory', 'defeat'];
 }
 
 export const audio = new AudioBusImpl();

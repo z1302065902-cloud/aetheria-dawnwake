@@ -53,6 +53,48 @@ for (const p of PROFILES) {
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto(TARGET, { waitUntil: 'load', timeout: 60000 });
   await page.waitForFunction(() => window.__AETHERIA__ && window.__AETHERIA__.scene.isActive('Menu'), null, { timeout: 30000 });
+  // a) menu screens (main / campaign / heroes / settings) must not overflow.
+  //    These are desktop-only screens: on the two phone profiles they are allowed to
+  //    overflow (documented as out of scope) — only the HUD must survive any viewport.
+  const menuEscapes = [];
+  const menuScreens = p.strict ? ['main', 'campaign', 'heroes', 'settings'] : ['main'];
+  for (const screen of menuScreens) {
+    const escaped = await page.evaluate((name) => {
+      const menu = window.__AETHERIA__.scene.getScene('Menu');
+      menu.screen = name;
+      menu.render();
+      const out = [];
+      const rec = (list) => {
+        for (const o of list) {
+          if (o.list) rec(o.list);
+          if (!o.visible) continue;
+          const w = o.width ?? 0;
+          const h = o.height ?? 0;
+          if (!w || !h) continue;
+          const ox = o.originX ?? 0.5;
+          const oy = o.originY ?? 0.5;
+          const x = (o.x ?? 0) - ox * w;
+          const y = (o.y ?? 0) - oy * h;
+          if (!Number.isFinite(x) || !Number.isFinite(y)) {
+            out.push(`${o.type}:NaN`);
+            continue;
+          }
+          if (x < -2 || y < -2 || x + w > window.innerWidth + 2 || y + h > window.innerHeight + 2) {
+            out.push(`${o.type}(${x.toFixed(0)},${y.toFixed(0)},${w.toFixed(0)}x${h.toFixed(0)})`);
+          }
+        }
+      };
+      rec(menu.children.list);
+      return out;
+    }, screen);
+    if (escaped.length > 0) menuEscapes.push(`${screen}: ${escaped.slice(0, 4).join(' ')}`);
+  }
+  check(
+    `layout[${p.name}]: menu screens fit the viewport${p.strict ? ' (main/campaign/heroes/settings)' : ' (main only — phones are out of scope)'}`,
+    menuEscapes.length === 0,
+    menuEscapes.join(' | '),
+  );
+
   await page.evaluate(() => {
     window.__AETHERIA__.scene.getScene('Menu').scene.start('Battle', { missionId: 'm01', heroId: 'knightCommander' });
   });

@@ -82,7 +82,7 @@ export class CombatSystem implements ProjectilePoolApi {
         continue;
       }
       const atk = b.def.attack;
-      const target = world.nearestEnemy(b.x, b.y, atk.range, b.team);
+      const target = world.nearestEnemy(b.x, b.y, atk.range, b.team, (e) => world.canSee(e.x, e.y, b.team));
       if (!target) continue;
       b.cooldown = atk.cooldown;
       const angle = Math.atan2(target.y - b.y, target.x - b.x);
@@ -163,7 +163,9 @@ export class CombatSystem implements ProjectilePoolApi {
   private attackSpeedMulOf(u: Unit): number {
     let mul = 1;
     for (const b of u.buffs) mul *= b.attackMul ?? 1;
-    return mul > 1 ? 1.35 : 1;
+    // equipment attack speed (percent) is a real stat, not flavour text
+    if (u instanceof Hero && u.equipment.attackSpeed) mul *= 1 + u.equipment.attackSpeed / 100;
+    return mul > 1 ? Math.min(2.2, mul * 1.35) : 1;
   }
 
   // ────────────────────────── projectiles ──────────────────────────

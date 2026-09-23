@@ -6,6 +6,8 @@ import { save } from '../core/SaveManager';
 import { MISSIONS, PLAYABLE_MISSIONS } from '../data/missions';
 import { HEROES, HERO_ORDER } from '../data/heroes';
 import { RELICS } from '../data/items';
+import { TALENTS, TALENT_BRANCH_LABEL } from '../data/talents';
+import { equipFromInventory, heroSheet, unequipSlot } from '../systems/Equipment';
 import { metaOf } from '../art/SpriteFactory';
 
 type Screen = 'main' | 'campaign' | 'heroes' | 'settings';
@@ -197,64 +199,168 @@ export class MenuScene extends Phaser.Scene {
 
   private renderHeroes(): void {
     const s = this.s;
-    const panelW = Math.min(this.W * 0.9, 1180 * s);
+    const panelW = Math.min(this.W * 0.94, 1240 * s);
     const panelX = (this.W - panelW) / 2;
-    const panelY = this.H * 0.1;
-    const panelH = this.H * 0.78;
-    drawPanel(this.g, panelX, panelY, panelW, panelH, { header: true, alpha: 0.9 });
-    this.addText(this.W / 2, panelY + 14 * s, '英雄 · 装备 · 遗物', 18, toCss(PAL.uiGold), [0.5, 0.5], true);
+    const panelY = this.H * 0.07;
+    const panelH = this.H * 0.86;
+    drawPanel(this.g, panelX, panelY, panelW, panelH, { header: true, alpha: 0.92 });
+    this.addText(this.W / 2, panelY + 14 * s, '英雄 · 装备 · 天赋 · 遗物', 18, toCss(PAL.uiGold), [0.5, 0.5], true);
 
+    // ── hero cards ───────────────────────────────────────────────
     HERO_ORDER.forEach((id, i) => {
       const def = HEROES[id];
       const colW = panelW / 3;
       const x = panelX + colW * i + colW / 2;
-      const y = panelY + 60 * s;
-      const img = this.add.image(x, y + 30 * s, `u_${id}`).setScale(3.2 * s * metaOf(`u_${id}`).sx);
-      this.root.add(img);
+      const y = panelY + 46 * s;
       const selected = this.selectedHero === id;
       if (selected) {
         this.g.lineStyle(2, 0xffd257, 0.9);
-        this.g.strokeRoundedRect(x - colW / 2 + 8 * s, y - 40 * s, colW - 16 * s, 118 * s, 8);
+        this.g.strokeRoundedRect(x - colW / 2 + 8 * s, y - 8 * s, colW - 16 * s, 152 * s, 8);
       }
-      this.addText(x, y + 74 * s, `${def.name} · ${def.title}`, 16, toCss(PAL.uiGold), [0.5, 0.5], true);
-      this.addText(x, y + 96 * s, def.bio, 12, toCss(PAL.uiText), [0.5, 0]).setWordWrapWidth(colW - 40 * s);
-      const skills = def.skills.map((sid) => HEROES[id].skills.indexOf(sid));
-      void skills;
-      this.addText(x, y + 160 * s, `定位：${def.role === 'tank' ? '近战坦克' : def.role === 'mage' ? '远程法术 AOE' : '远程输出'}　基础 HP ${def.base.hp} / 攻 ${def.base.attack}`, 12, toCss(PAL.uiDim), [0.5, 0]);
-      // skill icons
+      const img = this.add.image(x, y + 30 * s, `u_${id}`).setScale(1.5 * s * metaOf(`u_${id}`).sx);
+      this.root.add(img);
+      this.addText(x, y + 66 * s, `${def.name} · ${def.title}`, 15, toCss(PAL.uiGold), [0.5, 0.5], true);
+      this.addText(
+        x,
+        y + 82 * s,
+        `${def.role === 'tank' ? '近战坦克' : def.role === 'mage' ? '远程法术 AOE' : '远程输出'}　HP ${def.base.hp} / 攻 ${def.base.attack} / 甲 ${def.base.armor}`,
+        12,
+        toCss(PAL.uiDim),
+        [0.5, 0.5],
+      );
       def.skills.forEach((sid, k) => {
-        const icon = this.add.image(x - 66 * s + k * 44 * s, y + 196 * s, `icon_${sid}`).setDisplaySize(38 * s, 38 * s);
+        const icon = this.add.image(x - 66 * s + k * 44 * s, y + 104 * s, `icon_${sid}`).setDisplaySize(34 * s, 34 * s);
         this.root.add(icon);
       });
-      const btn = new Button(this, x, y + 232 * s, colW - 60 * s, 32 * s, selected ? '已选择' : '选择此英雄', () => {
+      const btn = new Button(this, x, y + 134 * s, colW - 90 * s, 30 * s, selected ? '已选择' : '选择此英雄', () => {
         this.selectedHero = id;
+        save.current.hero.id = id;
+        save.save();
         this.render();
       });
       this.root.add([btn.rect, btn.label]);
     });
 
-    // relics
-    const relicY = panelY + panelH * 0.66;
-    this.addText(panelX + 30 * s, relicY, '遗物（Roguelite 永久成长）', 15, toCss(PAL.uiGold), [0, 0.5], true);
-    RELICS.forEach((r, i) => {
-      const owned = save.current.hero.relics.includes(r.id);
-      const x = panelX + 30 * s + (i % 3) * (panelW / 3 - 10 * s);
-      const y = relicY + 28 * s + Math.floor(i / 3) * 34 * s;
-      this.addText(x, y, `${owned ? '✔' : '○'} ${r.name} — ${r.desc}`, 12, toCss(owned ? 0x9fffb0 : PAL.uiDim), [0, 0.5]);
+    // ── divider ──────────────────────────────────────────────────
+    const dividerY = panelY + 208 * s;
+    this.g.lineStyle(1, PAL.uiBorder, 0.7);
+    this.g.lineBetween(panelX + 20 * s, dividerY, panelX + panelW - 20 * s, dividerY);
+
+    const sheet = heroSheet(save.current);
+    const colW = (panelW - 60 * s) / 3;
+    const colX = [panelX + 20 * s, panelX + 30 * s + colW, panelX + 40 * s + colW * 2];
+    const top = dividerY + 18 * s;
+
+    // ── column 1: equipment slots ────────────────────────────────
+    this.addText(colX[0], top, '装备（点击卸下）', 15, toCss(PAL.uiGold), [0, 0.5], true);
+    sheet.slots.forEach((slot, i) => {
+      const y = top + 30 * s + i * 34 * s;
+      const text = slot.item
+        ? `${slot.label}：${slot.item.name}　${this.itemStatsText(slot.item)}`
+        : `${slot.label}：— 空 —`;
+      this.addText(colX[0], y, text, 12, slot.item ? this.rarityColor(slot.item.rarity) : toCss(PAL.uiDim), [0, 0.5]);
+      if (slot.item) {
+        const b = new Button(this, colX[0] + colW - 34 * s, y, 62 * s, 26 * s, '卸下', () => {
+          unequipSlot(save.current, slot.slot);
+          save.save();
+          this.render();
+        });
+        this.root.add([b.rect, b.label]);
+      }
+    });
+    const totals = sheet.totals;
+    this.addText(
+      colX[0],
+      top + 30 * s + 4 * 34 * s + 14 * s,
+      `合计：攻 +${totals.attack}　甲 +${totals.armor}　生命 +${totals.hp}　法力 +${totals.mana}\n暴击 +${totals.crit}%　攻速 +${totals.attackSpeed}%　技能 +${totals.skillDamage}%`,
+      12,
+      toCss(PAL.uiText),
+      [0, 0],
+    );
+
+    // ── column 2: inventory ──────────────────────────────────────
+    this.addText(colX[1], top, `背包（${sheet.inventory.length} 件）`, 15, toCss(PAL.uiGold), [0, 0.5], true);
+    if (sheet.inventory.length === 0) {
+      this.addText(colX[1], top + 34 * s, '还没有战利品。通关会掉落装备（星级与 Boss 影响数量与品质）。', 12, toCss(PAL.uiDim), [0, 0.5]);
+    }
+    sheet.inventory.slice(0, 9).forEach((item, i) => {
+      const y = top + 30 * s + i * 32 * s;
+      const equipped = (save.current.hero.equipment ?? {})[item.slot] === item.id;
+      this.addText(colX[1], y, `${item.name}`, 12, this.rarityColor(item.rarity), [0, 0.5]);
+      this.addText(colX[1] + 92 * s, y, this.itemStatsText(item), 11, toCss(PAL.uiDim), [0, 0.5]);
+      const b = new Button(this, colX[1] + colW - 34 * s, y, 62 * s, 26 * s, equipped ? '已装备' : '装备', () => {
+        equipFromInventory(save.current, item.id);
+        save.save();
+        this.render();
+      });
+      b.setEnabled(!equipped);
+      this.root.add([b.rect, b.label]);
     });
 
-    this.addButton(this.W / 2, panelY + panelH + 30 * s, 240 * s, 38 * s, '返回', () => {
+    // ── column 3: talents + relics ───────────────────────────────
+    this.addText(colX[2], top, `天赋（剩余 ${save.current.hero.talentPoints} 点）`, 15, toCss(PAL.uiGold), [0, 0.5], true);
+    TALENTS.forEach((t, i) => {
+      const y = top + 30 * s + i * 30 * s;
+      const rank = save.current.hero.talents?.[t.id] ?? 0;
+      const maxed = rank >= t.maxRank;
+      this.addText(
+        colX[2],
+        y,
+        `${TALENT_BRANCH_LABEL[t.branch]}·${t.name} ${rank}/${t.maxRank}`,
+        12,
+        rank > 0 ? toCss(0x9fffb0) : toCss(PAL.uiText),
+        [0, 0.5],
+      );
+      this.addText(colX[2] + 150 * s, y, t.desc, 11, toCss(PAL.uiDim), [0, 0.5]);
+      const b = new Button(this, colX[2] + colW - 24 * s, y, 34 * s, 24 * s, '+', () => {
+        save.spendTalentPoint(t.id, t.maxRank);
+        this.render();
+      });
+      b.setEnabled(!maxed && save.current.hero.talentPoints > 0);
+      this.root.add([b.rect, b.label]);
+    });
+    const relicTop = top + 30 * s + TALENTS.length * 30 * s + 18 * s;
+    this.addText(colX[2], relicTop, `遗物（${save.current.hero.relics.length}/${RELICS.length}）`, 15, toCss(PAL.uiGold), [0, 0.5], true);
+    RELICS.forEach((r, i) => {
+      const owned = save.current.hero.relics.includes(r.id);
+      const y = relicTop + 26 * s + i * 20 * s;
+      this.addText(colX[2], y, `${owned ? '✔' : '○'} ${r.name} — ${r.desc}`, 11, toCss(owned ? 0x9fffb0 : PAL.uiDim), [0, 0.5]);
+    });
+
+    this.addButton(this.W / 2, panelY + panelH + 26 * s, 240 * s, 38 * s, '返回', () => {
       this.screen = 'main';
       this.render();
     });
   }
 
+  private rarityColor(rarity: 'common' | 'rare' | 'epic' | 'legendary'): string {
+    return rarity === 'legendary' ? toCss(0xffb347) : rarity === 'epic' ? toCss(0xc084fc) : rarity === 'rare' ? toCss(0x7fd8ff) : toCss(PAL.uiText);
+  }
+
+  private itemStatsText(item: { stats: Record<string, number | undefined> }): string {
+    const label: Record<string, string> = {
+      attack: '攻',
+      armor: '甲',
+      hp: '生命',
+      mana: '法力',
+      crit: '暴',
+      attackSpeed: '攻速',
+      skillDamage: '技能',
+    };
+    const pct = new Set(['crit', 'attackSpeed', 'skillDamage']);
+    return Object.entries(item.stats)
+      .filter(([, v]) => !!v)
+      .map(([k, v]) => `${label[k] ?? k}+${v}${pct.has(k) ? '%' : ''}`)
+      .join(' ');
+  }
+
+
   private renderSettings(): void {
     const s = this.s;
     const panelW = Math.min(this.W * 0.7, 700 * s);
     const panelX = (this.W - panelW) / 2;
-    const panelY = this.H * 0.18;
-    const panelH = this.H * 0.56;
+    const panelY = this.H * 0.16;
+    const panelH = this.H * 0.6;
     drawPanel(this.g, panelX, panelY, panelW, panelH, { header: true, alpha: 0.9 });
     this.addText(this.W / 2, panelY + 14 * s, '设置', 18, toCss(PAL.uiGold), [0.5, 0.5], true);
 
@@ -293,8 +399,13 @@ export class MenuScene extends Phaser.Scene {
       refresh();
     });
     y += 56 * s;
-    this.addText(panelX + 30 * s, y, '存档保存在浏览器 LocalStorage（战役进度 / 英雄等级 / 遗物 / 设置）。', 12, toCss(PAL.uiDim), [0, 0.5]);
+    this.addText(panelX + 30 * s, y, '存档保存在浏览器 LocalStorage（战役进度 / 英雄等级 / 装备 / 天赋 / 遗物 / 设置）。', 12, toCss(PAL.uiDim), [0, 0.5]);
     y += 34 * s;
+    this.addButton(panelX + panelW / 2 - 150 * s, y, 280 * s, 34 * s, '退还全部天赋点（不损失进度）', () => {
+      save.respecTalents();
+      this.render();
+    });
+    y += 44 * s;
     this.addButton(panelX + panelW / 2, y, 260 * s, 34 * s, '清空存档并重置', () => {
       save.reset();
       audio.setVolumes(save.current.settings.music, save.current.settings.sfx, save.current.settings.muted);

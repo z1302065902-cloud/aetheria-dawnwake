@@ -29,6 +29,10 @@ import { getUnit } from '../data/units';
 import { SKILLS } from '../data/heroes';
 import { save } from '../core/SaveManager';
 import { buildModifiers, describeModifiers } from '../systems/Relics';
+import { FOG_TEX, VisionGrid } from '../systems/Vision';
+import { applyEquipmentToHero } from '../systems/Equipment';
+import { Rng } from '../core/Rng';
+import { rollLoot } from '../data/items';
 import type { MissionDef } from '../data/types';
 
 export interface HudAbilityView {
@@ -108,6 +112,9 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
   abilities!: HeroAbilities;
   missions!: MissionSystem;
   selection!: SelectionSystem;
+  vision!: VisionGrid;
+  private fogImage!: Phaser.GameObjects.Image;
+  private visionTimer = 0;
 
   paused = false;
   /** Simulation speed multiplier (used by the automated soak/playtest harness). */
@@ -153,6 +160,7 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
     this.controlGroups = [[], [], [], [], []];
     this.unsubs = [];
     this.ghost = null;
+    this.visionTimer = 0;
 
     const missionId = data?.missionId ?? 'm01';
     this.mission = getMission(missionId);
@@ -168,7 +176,16 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
     this.path = this.world.pathfinder;
     // Roguelite progression: the permanent relics bought in previous runs are turned
     // into live match modifiers before anything is spawned.
-    this.world.mods = buildModifiers(save.current.hero.relics);
+    this.world.mods = buildModifiers(save.current.hero.relics, save.current.hero.talents);
+    this.vision = new VisionGrid(this, this.map.w, this.map.h);
+    this.world.vision = this.vision;
+    this.vision.update(this.world);
+    this.vision.paint();
+    this.fogImage = this.add
+      .image(0, 0, FOG_TEX)
+      .setOrigin(0, 0)
+      .setDisplaySize(this.map.w * 40, this.map.h * 40)
+      .setDepth(DEPTH.FOG);
 
     this.selection = new SelectionSystem(this.world);
     this.movement = new MovementSystem(this);
@@ -184,11 +201,13 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
     this.ai.missionRef = this.mission;
 
     // hero
-    const heroId = data?.heroId ?? this.mission.hero;
+    const heroId = data?.heroId ?? save.current.hero.id ?? this.mission.hero;
     const start = this.map.playerStart;
     const hero = this.world.spawnUnit(heroId, start.x + 90, start.y + 70, FACTION.PLAYER) as Hero;
     this.selection.setUnits([hero], true);
     this.world.hero = hero;
+    // permanent progression: equipment bought/earned in earlier runs applies here
+    applyEquipmentToHero(hero, save.current);
 
     const setup = setupMatch(this.world, this.mission);
     // keep the hero on top of the starting units
@@ -258,6 +277,13 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
       this.now += dt;
       this.path.update(dt);
       this.world.update(dt);
+      // fog recompute is throttled: it is a 6-7 Hz concern, not a per-frame one
+      this.visionTimer += dt;
+      if (this.visionTimer >= 0.15) {
+        this.visionTimer = 0;
+        this.vision.update(this.world);
+        this.vision.paint();
+      }
       this.orders.update(dt);
       this.ai.update(dt);
       this.movement.update(dt);
@@ -736,10 +762,27 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
       save.current.hero.talentPoints += result.stars;
       if (result.relic) save.addRelic(result.relic);
       save.current.stats.victories++;
+      // ── loot roll: victory always drops something, stars and the boss add more.
+      //    The inventory holds unique items, so a drop must not roll a duplicate. ──
+      const rng = new Rng(Date.now() & 0xffffffff);
+      const drops = 1 + (result.stars >= 3 ? 1 : 0) + (this.ai.bossSpawned ? 1 : 0);
+      const tier = result.stars >= 3 ? 2 : 1;
+      const rolled = new Set<string>();
+      for (let i = 0; i < drops; i++) {
+        let item = rollLoot(rng, tier);
+        for (let tries = 0; tries < 6 && (rolled.has(item.id) || save.current.hero.inventory.includes(item.id)); tries++) {
+          item = rollLoot(rng, tier);
+        }
+        if (rolled.has(item.id) || save.current.hero.inventory.includes(item.id)) continue; // pool exhausted
+        rolled.add(item.id);
+        save.addItem(item);
+        result.loot.push(item.name);
+      }
     }
     save.current.stats.matches++;
     save.addPlaytime(Math.round(result.seconds * 1000));
-    audio.playMusic('none');
+    // dedicated end-of-match tracks (the jingle still plays on top)
+    audio.playMusic(result.victory ? 'victory' : 'defeat');
     bus.emit(EV.MATCH_END, { ...result, missionId: this.mission.id, missionName: this.mission.name, parTime: this.mission.parTime });
   }
 

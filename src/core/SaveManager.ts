@@ -14,6 +14,8 @@ export interface SaveData {
     relics: string[];
     equipment: Partial<Record<'weapon' | 'armor' | 'ring' | 'amulet', string>>;
     inventory: string[];
+    /** talent id -> ranks bought */
+    talents: Record<string, number>;
   };
   settings: {
     music: number;
@@ -30,7 +32,7 @@ function defaultSave(): SaveData {
   return {
     version: 1,
     campaign: { unlockedMissions: ['m01'], completed: {} },
-    hero: { id: 'knightCommander', level: 1, xp: 0, talentPoints: 0, relics: [], equipment: {}, inventory: [] },
+    hero: { id: 'knightCommander', level: 1, xp: 0, talentPoints: 0, relics: [], equipment: {}, inventory: [], talents: {} },
     settings: { music: 0.42, sfx: 0.55, muted: false, showHints: true },
     stats: { matches: 0, victories: 0, playtimeMs: 0 },
   };
@@ -58,7 +60,13 @@ class SaveManagerImpl {
       const raw = window.localStorage.getItem(KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as SaveData;
-        this.data = { ...defaultSave(), ...parsed, settings: { ...defaultSave().settings, ...parsed.settings } };
+        const base = defaultSave();
+        this.data = {
+          ...base,
+          ...parsed,
+          settings: { ...base.settings, ...parsed.settings },
+          hero: { ...base.hero, ...parsed.hero, talents: { ...(parsed.hero?.talents ?? {}) }, equipment: { ...(parsed.hero?.equipment ?? {}) } },
+        };
       }
     } catch (err) {
       console.warn('[save] load failed, starting fresh', err);
@@ -102,8 +110,30 @@ class SaveManagerImpl {
   }
 
   addItem(item: ItemDef): void {
-    this.data.hero.inventory.push(item.id);
+    if (!this.data.hero.inventory.includes(item.id)) this.data.hero.inventory.push(item.id);
     if (!this.data.hero.equipment[item.slot]) this.data.hero.equipment[item.slot] = item.id;
+    this.save();
+  }
+
+  /** Spends one talent point on `talentId`; returns the new rank (0 = refused). */
+  spendTalentPoint(talentId: string, maxRank: number): number {
+    const ranks = this.data.hero.talents ?? {};
+    const cur = ranks[talentId] ?? 0;
+    if (this.data.hero.talentPoints <= 0 || cur >= maxRank) return cur;
+    ranks[talentId] = cur + 1;
+    this.data.hero.talents = ranks;
+    this.data.hero.talentPoints -= 1;
+    this.save();
+    return cur + 1;
+  }
+
+  /** Refunds every talent point (used by the reset button). */
+  respecTalents(): void {
+    const ranks = this.data.hero.talents ?? {};
+    let refund = 0;
+    for (const v of Object.values(ranks)) refund += v;
+    this.data.hero.talents = {};
+    this.data.hero.talentPoints += refund;
     this.save();
   }
 

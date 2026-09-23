@@ -6,21 +6,22 @@
 > ③ 区分「实现」与「符合标准」，状态用**三档**（已实现 / 部分实现 / 未实现）。
 >
 > 自动化命令：
-> `npm test`（32→38 项端到端，dev）· `npm run test:prod`（生产构建）· `npm run test:gpu`（真实 GPU 帧时）
-> · `npm run test:layout`（6 视口响应式）· `npm run test:soak`（5 局泄漏压测）
+> `npm test`（**60 项**端到端，dev）· `npm run test:prod`（生产构建）· `npm run test:gpu`（真实 GPU 帧时）
+> · `npm run test:layout`（6 视口响应式）· `npm run test:soak`（泄漏压测）
 >
-> 最近一次结果（2026-09-23 第二轮）：
-> **smoke 38/38（dev 与生产构建）· GPU 8/8 · layout 22/22 · soak 6/6**，控制台零 pageerror。
+> 最近一次结果（2026-09-23 第三轮）：
+> **smoke 60/60（dev 与生产构建各一遍）· GPU 8/8（vsync + 解除上限两种模式）· layout 24/24 · soak 6/6**，控制台零 pageerror。
 
 ## 汇总
 
 | 状态 | 条数 |
 |---|---|
-| ☑ 已实现 | 33 |
-| ◐ 部分实现 | 7 |
-| ☐ 未实现 | 3 |
+| ☑ 已实现 | 37 |
+| ◐ 部分实现 | 5 |
+| ☐ 未实现 | 1 |
 
-**本轮（第二轮）关闭的项**：D-01/D-04（真实 GPU 帧时 + 响应式布局）、E-04（遗物生效）、D-02 的泄漏判据（5 局压测）。
+**第三轮关闭的项**：战争迷雾（B-18）、装备与 Loot（E-03）、天赋加点（E-06/D-05）、第 5 首音乐（C-07）。
+**仅剩 1 项 ☐**：商业化预留（E-05）——按计划留到发布阶段做双构建，**不做客户端假门闸**。
 
 ---
 
@@ -161,6 +162,21 @@
 
 ---
 
+### B-18 战争迷雾（第三轮完成）
+- 标准（交接文档判据）：未探索区域不可见、探索后保留、敌人只在视野内渲染、小地图同步；顺带解锁 explore 类目标。
+- 验证方式：`npm test` 中 10 项 fog 断言 —— ① fog 纹理必须是 tile 分辨率（72×72）；② 开局基地可见、敌方营地既不可见也未探索；
+  ③ 营地附近 6 个敌人的 `sprite.visible` 全为 false；④ 玩家单位永远不被自己的迷雾隐藏；⑤ 开局探索面积只占全图一小部分；
+  ⑥ explore 目标在探索前必须是 `active`；⑦ 把英雄移动到立石后目标变 `done`；⑧ 英雄离开后该处 `visible=false` 但 `explored=true`。
+- 状态：☑ 已实现
+- 实测结果：`fog texture [72,72]`；`base true · camp visible false / explored false`；`6 enemies at the camp, all sprites hidden`；
+  `405 / 5184 tiles explored`（7.8%）；`explore 目标 active → done`；`离开后 visible=false / explored=true`（462 格保留）。
+- 代码位置：`src/systems/Vision.ts`（三态网格 + 共享 canvas 纹理）、`src/scenes/BattleScene.ts`（0.15s 节流更新 + 世界覆盖层）、
+  `src/scenes/HudScene.ts`（小地图复用同一张雾纹理）、`src/world/World.ts:applyFog/canSee`（敌人只在视野内渲染 + 玩家索敌受限）、
+  `src/systems/Mission.ts`（explore 目标）。
+- 备注：雾是**一张 tile 分辨率的 canvas 纹理**，世界与小地图共用 → 整套迷雾 = 1 draw call、每次变化只上传 72×72 像素。
+  真实帧成本从 1.21ms 升到 1.30ms（+0.08ms），可忽略。
+  设计取舍：**AI 不吃迷雾**（它是防守方、守自己的地盘），玩家索敌与塔的自动开火受视野限制。
+
 ## C. 表现（战斗反馈是本项目重点）
 
 ### C-01 命中反馈三件套
@@ -203,9 +219,11 @@
 ### C-07 程序化音频
 - 标准：主菜单/战斗/Boss 音乐；剑击、箭矢、魔法、爆炸、建造、资源、升级、技能、Boss 攻击、胜利、失败音效；音乐/音效独立音量 + 静音。
 - 验证方式：`audio.sfx()` 24 种；`audio.playMusic()` 3 轨（lookahead 步进音序器）；暂停菜单与设置页都有 ±/静音并写回存档。
-- 状态：◐ 部分实现
-- 实测结果：菜单 → 战斗 → Boss 会切换曲目与速度；`music/sfx` 音量各 10% 步进。
-- 差距：**胜利/失败只有音效（jingle）而不是独立音乐轨**（用户要求 5 首音乐）；无音频波形/采样，纯合成器。
+- 状态：☑ 已实现（第三轮补齐）
+- 实测结果：5 首音乐轨 **menu / battle / boss / victory / defeat** 全部可切换（断言 `trackCount === 5`）；
+  胜利时切到 victory 轨、战败切到 defeat 轨（各有独立断言）；菜单 → 战斗 → Boss 会按 BPM 138/116/104/66/84 切换。
+- 代码位置：`src/audio/AudioBus.ts`（`SCALES`/`ROOTS`/`melodyPattern`/BPM 各一档）、`src/scenes/BattleScene.ts:finishMatch`。
+- 备注：纯 WebAudio 合成（无采样、无波形文件），因此「音乐」是程序化作曲而非录音。
 
 ---
 
@@ -246,7 +264,9 @@
 - 标准：HUD 由视口推导，任何支持尺寸下面板不溢出、不重叠。
 - 验证方式：`npm run test:layout` —— 6 个视口各自启动一局，读取 HUD 上一帧真实绘制的矩形（`hud.getLayoutDebug()`）做断言。
 - 状态：☑ 已实现
-- 实测结果：1920×1080 / 1600×900 / 1280×720 / 1200×1113@2 四档 **全部面板在视口内 + 底部四面板零重叠 + 4 个技能按钮都在技能面板内**；844×390@2 与 390×844@3 两档手机尺寸**仅做溢出检查**（手机不在 Phase 1 范围，但也不许破版）。
+- 实测结果：1920×1080 / 1600×900 / 1280×720 / 1200×1113@2 四档 **全部面板在视口内 + 底部四面板零重叠 + 4 个技能按钮都在技能面板内 + 四个菜单页（主/关卡/英雄装备/设置）零溢出**；
+  844×390@2 与 390×844@3 两档手机尺寸**只检查 HUD 与主菜单**（手机不在 Phase 1 范围）。
+- 已知差距：**手机尺寸下「英雄/装备」等桌面专用菜单页会溢出**（面板按 1600×900 设计，不做手机重排）；手机支持不在范围内，此处如实记录。
 - 代码位置：`src/scenes/HudScene.ts:layout()`；诊断接口 `getLayoutDebug()`。
 - 备注：这轮顺手修掉一个真 bug —— 底部四面板原先是固定尺寸，窄视口下中央指令面板与技能面板会**重叠 48px**；改成按视口比例封顶（minimap ≤13%W、英雄 ≤26%W、技能 ≤26%W、指令面板吃剩余空间）。
 
@@ -255,7 +275,9 @@
 - 验证方式：跑完一局后读 `localStorage['aetheria.dawnwake.save.v1']`。
 - 状态：◐ 部分实现
 - 实测结果：`{"exists":true,"unlocked":["m01","m02"],"victories":1}` —— 通关后自动解锁下一关并写入存档；主菜单「继续上次进度」会读它；设置页可清档。
-- 差距：**装备没有实际掉落/装备界面**（只有数据结构 + `addItem`）；**遗物加成未接入战斗计算**；**天赋点只累积不能花**（无天赋树界面）。
+- 第三轮补齐：装备掉落/装备界面（E-03）、遗物加成（E-04）、天赋加点（E-06）都已接入并断言；
+  存档字段新增 `hero.talents`，旧存档加载时会自动补默认值（已做向后兼容）。
+- 剩余差距：**没有「存档槽位/导出导入」**，只有单份 LocalStorage 存档。
 
 ---
 
@@ -270,9 +292,18 @@
 - 状态：◐ 部分实现
 - 实测结果：`MISSIONS` 10 关数据全部写好（目标/波次/营地/Boss/简报），`PLAYABLE_MISSIONS = {m01}`；关卡选择界面把 02–10 标为「Phase 2」。
 
-### E-03 装备品质与随机属性 / Loot
-- 状态：☐ 未实现（仅有数据）
-- 实测结果：`ITEMS` 10 件（common→legendary，7 种属性）、`rollLoot()` 按层数掉落已写好；**没有掉落触发点、没有背包/装备 UI**。
+### E-03 装备品质与随机属性 / Loot（第三轮完成）
+- 标准：完成任务要真的掉装备、能在界面换上、属性要真的作用到英雄。
+- 验证方式：`npm test` 中 6 项 —— ① 三星胜利 + 击杀 Boss 后存档背包必须增长；② 结算面板必须列出战利品名称；
+  ③ 在菜单背包里点击「装备」按钮后存档 `equipment.weapon` 必须写入；④ 进入对局后英雄 `equipment.attack/crit/skillDamage` 必须等于该装备数值，
+  且 `attackTotal === baseAttack + attack`。
+- 状态：☑ 已实现
+- 实测结果：`2 → 3 items: ["towerShield","shortSword","thornCrown"]`；结算面板 `战利品：荆棘王冠…`；
+  `点击装备 → {"weapon":"tidePiercer"}`；`入局后 {"equipAttack":34,"equipCrit":14,"equipSkill":18,"attackTotal":62,"baseAttack":28}`。
+- 代码位置：`src/systems/Equipment.ts`（属性汇总/装备/卸下/发放）、`src/scenes/BattleScene.ts:finishMatch`（掉落 roll）、
+  `src/scenes/MenuScene.ts:renderHeroes`（装备槽 + 背包 UI）。
+- 备注：掉落数量 = 1 + 三星加成 + 击杀 Boss 加成，并按「背包唯一」去重（避免三连同名）。
+  攻速属性也已接入真实战斗节奏（`Combat.attackSpeedMulOf`）。
 
 ### E-04 Roguelite 遗物永久成长（本轮完成）
 - 标准：遗物加成必须真的作用到战斗/经济，不是只发个物品。
@@ -288,9 +319,12 @@
 - 备注：这条建议留到发布阶段按 `game-publish-workflow` 做双 build，而不是客户端假门闸。
 
 ### E-06 菜单项（New Game / Continue / Campaign / Heroes / Armory / Talents / Settings）
-- 状态：◐ 部分实现
-- 实测结果：主菜单 5 项（开始战役 / 关卡选择 / 英雄·装备·遗物 / 设置 / 继续），英雄页含 3 英雄 + 遗物列表。
-- 差距：Armory / Talents 合并进了「英雄」页，且**不能真正装备或加点**（见 D-05）。
+- 状态：☑ 已实现（Armory 与 Talents 合并进「英雄」页，功能完整）
+- 验证方式：`npm test` 中 3 项天赋断言 —— ① 天赋行必须有 `+` 按钮；② 点击后存档 `talentPoints` 必须 -1 且 `talents.flameMastery === 1`；
+  ③ 入局后 `world.mods.fireDamage` 必须包含该天赋，且实测伤害比 = 1.06。
+- 实测结果：`点击 + → {"points":2,"ranks":{"flameMastery":1}}`；`mods.fireDamage 0.06 · 106.88 vs 100.83 = ×1.060`；
+  `src/data/talents.ts` 6 个天赋（战阵/秘法/王国三系，各 2 级），设置页提供「退还全部天赋点」。
+- 备注：**发现并修掉一个真 bug** —— `BattleScene` 调 `buildModifiers()` 时只传了遗物、**没传天赋**，导致天赋点了完全不生效（见 PROGRESS 踩坑 #17）。
 
 ---
 

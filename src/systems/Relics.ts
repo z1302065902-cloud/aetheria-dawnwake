@@ -1,4 +1,5 @@
 import { RELICS } from '../data/items';
+import { TALENTS } from '../data/talents';
 import type { RelicDef } from '../data/types';
 
 /**
@@ -35,14 +36,23 @@ export function emptyModifiers(): MatchModifiers {
   };
 }
 
-/** Sums every owned relic into one modifier set. Called once per match start. */
-export function buildModifiers(relicIds: string[]): MatchModifiers {
+/**
+ * Sums every owned relic AND every bought talent rank into one modifier set.
+ * Called once per match start — this is the single place where permanent progression
+ * becomes gameplay numbers.
+ */
+export function buildModifiers(relicIds: string[], talents: Record<string, number> = {}): MatchModifiers {
   const mods = emptyModifiers();
   for (const id of relicIds) {
     const relic = RELICS.find((r) => r.id === id);
     if (!relic) continue;
     const { key, value } = relic.effect;
     if (key in mods) mods[key as keyof MatchModifiers] += value;
+  }
+  for (const talent of TALENTS) {
+    const rank = talents[talent.id] ?? 0;
+    if (rank <= 0) continue;
+    mods[talent.key] += talent.perRank * rank;
   }
   return mods;
 }

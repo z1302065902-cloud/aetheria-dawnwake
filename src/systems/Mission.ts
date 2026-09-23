@@ -25,6 +25,8 @@ export interface MatchResult {
   objectivesDone: number;
   objectivesFailed: number;
   optionalDone: number;
+  /** item names dropped by this match (filled in by the battle scene) */
+  loot: string[];
 }
 
 /**
@@ -176,9 +178,19 @@ export class MissionSystem {
         }
         break;
       }
+      case 'explore': {
+        // with fog of war, "explore" means: get the search point into your vision
+        const point = world.map.searchPoints[0];
+        if (!point) {
+          o.progress = o.total;
+          break;
+        }
+        const vision = world.vision;
+        o.progress = !vision || vision.isVisibleWorld(point.x, point.y) ? 1 : 0;
+        break;
+      }
       case 'escort':
       case 'rescue':
-      case 'explore':
         o.progress = 0;
         break;
       default:
@@ -287,6 +299,7 @@ export class MissionSystem {
       objectivesDone: this.objectives.filter((o) => o.state === 'done').length,
       objectivesFailed: this.objectives.filter((o) => o.state === 'failed').length,
       optionalDone,
+      loot: [],
     });
   }
 }

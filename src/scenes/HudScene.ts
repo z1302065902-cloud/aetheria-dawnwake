@@ -4,6 +4,7 @@ import { audio } from '../audio/AudioBus';
 import { PAL, toCss } from '../art/Palette';
 import { Bar, Button, drawPanel, formatTime, text } from '../ui/UiKit';
 import { metaOf } from '../art/SpriteFactory';
+import { FOG_TEX } from '../systems/Vision';
 import { BUILDINGS } from '../data/buildings';
 import { getUnit } from '../data/units';
 import { RESOURCE_COLOR, type ResourceId } from '../config/Constants';
@@ -38,6 +39,7 @@ export class HudScene extends Phaser.Scene {
 
   private minimapImage!: Phaser.GameObjects.Image;
   private minimapG!: Phaser.GameObjects.Graphics;
+  private minimapFog!: Phaser.GameObjects.Image;
   private minimapZone!: Phaser.GameObjects.Rectangle;
 
   private heroName!: Phaser.GameObjects.Text;
@@ -115,6 +117,9 @@ export class HudScene extends Phaser.Scene {
 
     // minimap
     this.minimapImage = this.add.image(0, 0, 'minimapBase').setOrigin(0, 0);
+    // the fog texture is authored at tile resolution, so the same texture serves the
+    // world overlay and the minimap (scaled down here)
+    this.minimapFog = this.add.image(0, 0, FOG_TEX).setOrigin(0, 0).setAlpha(0.9);
     this.minimapG = this.add.graphics();
     this.minimapZone = this.add.rectangle(0, 0, 10, 10, 0xffffff, 0.001).setInteractive({ useHandCursor: true });
     this.minimapZone.on('pointerdown', (p: Phaser.Input.Pointer) => {
@@ -278,6 +283,7 @@ export class HudScene extends Phaser.Scene {
     const mmX = margin;
     const mmY = this.H - mmSize - 6 * s;
     this.minimapImage.setPosition(mmX, mmY).setDisplaySize(mmSize, mmSize);
+    this.minimapFog.setPosition(mmX, mmY).setDisplaySize(mmSize, mmSize);
     this.minimapZone.setPosition(mmX + mmSize / 2, mmY + mmSize / 2).setSize(mmSize, mmSize);
     this.minimapZone.setInteractive();
     g.lineStyle(1.5, PAL.uiBorder, 0.9);
@@ -289,12 +295,12 @@ export class HudScene extends Phaser.Scene {
     const hpY = this.H - bottomH + 8 * s;
     const hpH = bottomH - 16 * s;
     drawPanel(g, hpX, hpY, hpW, hpH, { alpha: 0.9 });
-    const portraitScale = Math.min(1.25 * s, hpW / 240);
-    this.heroPortrait.setPosition(hpX + 42 * s, hpY + hpH * 0.56).setScale(portraitScale);
-    this.heroName.setPosition(hpX + 84 * s, hpY + 16 * s).setFontSize(15 * s);
+    const portraitScale = Math.min(1.05 * s, hpW / 280);
+    this.heroPortrait.setPosition(hpX + 40 * s, hpY + hpH * 0.56).setScale(portraitScale);
+    this.heroName.setPosition(hpX + 96 * s, hpY + 16 * s).setFontSize(15 * s);
     this.heroLevel.setPosition(hpX + hpW - 10 * s, hpY + 16 * s).setFontSize(13 * s);
-    const barX = hpX + 84 * s;
-    const barW = Math.max(30 * s, hpW - 96 * s);
+    const barX = hpX + 96 * s;
+    const barW = Math.max(30 * s, hpW - 108 * s);
     this.heroHp.x = barX;
     this.heroHp.y = hpY + 34 * s;
     this.heroHp.w = barW;
@@ -492,6 +498,7 @@ export class HudScene extends Phaser.Scene {
     const lines = [
       `完成任务：${r.objectivesDone}　可选完成：${r.optionalDone}　失败：${r.objectivesFailed}`,
       `获得金币：${r.goldEarned}　英雄经验：${r.xpEarned}${r.relic ? `　遗物：${r.relic}` : ''}`,
+      r.loot && r.loot.length > 0 ? `战利品：${r.loot.join('、')}（可在「英雄 / 装备」里换上）` : '本局没有掉落装备',
       r.victory ? '进度已保存到本地存档。' : '提示：多造农庄提高人口，沿路造塔，让英雄带着部队推进。',
     ];
     this.resultBody.setText(lines.join('\n'));
@@ -685,11 +692,16 @@ export class HudScene extends Phaser.Scene {
     g.clear();
     g.fillStyle(0x000000, 0.35);
     g.fillRect(mmBounds.x, mmBounds.y, mmBounds.width, mmBounds.height);
+    const vision = this.battle.world.vision;
+    const worldW = this.battle.world.map.w * 40;
+    const worldH = this.battle.world.map.h * 40;
     for (const bb of st.minimap.buildings) {
+      if (vision && bb.team !== 1 && !vision.isExploredWorld(bb.x * worldW, bb.y * worldH)) continue;
       g.fillStyle(bb.team === 1 ? 0x7fd8ff : bb.team === 2 ? 0xff6a5a : 0xd9c9a0, 1);
       g.fillRect(mmBounds.x + bb.x * mmBounds.width - 2, mmBounds.y + bb.y * mmBounds.height - 2, 5, 5);
     }
     for (const u of st.minimap.units) {
+      if (u.team !== 1 && vision && !vision.isVisibleWorld(u.x * worldW, u.y * worldH)) continue;
       if (u.hero) {
         g.fillStyle(0xffffff, 1);
         g.fillRect(mmBounds.x + u.x * mmBounds.width - 2.5, mmBounds.y + u.y * mmBounds.height - 2.5, 6, 6);
