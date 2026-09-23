@@ -288,6 +288,7 @@ export class World {
     let bestD = Infinity;
     this.hashUnits.forEachNear(x, y, radius, (u) => {
       if (u.dead || u.team === team || u.team === 3) return;
+      if (u.captive) return; // a prisoner is not a target until they are freed
       if (filter && !filter(u)) return;
       const d = (u.x - x) ** 2 + (u.y - y) ** 2;
       if (d < bestD) {
@@ -358,6 +359,7 @@ export class World {
 
   damage(target: Building | Unit, amount: number, type: 'physical' | 'magic' | 'siege', sourceTeam: number, crit = false): number {
     if (target.dead) return 0;
+    if (target.kind === 'unit' && (target as Unit).captive) return 0; // captives are inviolate
     const armor = target.kind === 'building' ? (target as Building).armor : (target as Unit).armorTotal;
     const armorType = target.kind === 'building' ? (target as Building).def.armorType : (target as Unit).def.armorType;
     const reduction = armor / (armor + CFG.ARMOR_CONST);

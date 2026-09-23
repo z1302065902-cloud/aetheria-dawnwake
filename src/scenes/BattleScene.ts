@@ -294,8 +294,24 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
     // ── mission objects: escort caravan / rescue prisoner ──
     const needsEscort = this.mission.objectives.some((o) => o.kind === 'escort');
     const needsRescue = this.mission.objectives.some((o) => o.kind === 'rescue');
+    /** Mission objects must land on walkable in-bounds ground (a camp at the map edge would
+     *  otherwise push them off the map and the objective becomes unsatisfiable). */
+    const safeSpot = (x: number, y: number): { x: number; y: number } => {
+      const tx = Math.max(1, Math.min(this.map.w - 2, Math.floor(x / TILE)));
+      const ty = Math.max(1, Math.min(this.map.h - 2, Math.floor(y / TILE)));
+      // a camp in a corner can sit inside a dense forest: widen the search before giving up
+      for (const r of [8, 16, 28, 44]) {
+        const free = this.path.nearestFree(tx, ty, r);
+        if (free) return { x: free.tx * TILE + TILE / 2, y: free.ty * TILE + TILE / 2 };
+      }
+      const castle = this.world.buildings.find((b) => b.team === 1 && b.def.id === 'castle');
+      const base = castle ?? this.map.playerStart;
+      const free = this.path.nearestFree(Math.floor(base.x / TILE), Math.floor(base.y / TILE), 12);
+      return free ? { x: free.tx * TILE + TILE / 2, y: free.ty * TILE + TILE / 2 } : { x: base.x, y: base.y };
+    };
     if (needsEscort) {
-      const c = this.world.spawnUnit('caravan', this.map.playerStart.x + 40, this.map.playerStart.y + 140, FACTION.PLAYER);
+      const spot = safeSpot(this.map.playerStart.x + 40, this.map.playerStart.y + 140);
+      const c = this.world.spawnUnit('caravan', spot.x, spot.y, FACTION.PLAYER);
       c.team = 1;
       const goal = this.map.landings[this.map.landings.length - 1] ?? this.map.playerStart;
       this.orders.move([c], goal.x, goal.y, false);
@@ -303,11 +319,19 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
     }
     if (needsRescue) {
       const camp = this.world.buildings.find((b) => b.team === 2);
-      const p = this.world.spawnUnit('prisoner', camp ? camp.x - 90 : this.map.playerStart.x + 900, camp ? camp.y + 60 : this.map.playerStart.y + 300, FACTION.WILDBORN);
-      p.team = 2;
-      p.aiState = 'idle';
-      p.homeX = p.x;
-      p.homeY = p.y;
+      const spot = safeSpot(camp ? camp.x - 90 : this.map.playerStart.x + 900, camp ? camp.y + 60 : this.map.playerStart.y + 300);
+      const p = this.world.spawnUnit('prisoner', spot.x, spot.y, FACTION.WILDBORN);
+      if (!p) {
+        // never `return` here: create() still has to wire the automation and army groups
+        console.warn('[mission] failed to spawn the rescue target — objective will stay open');
+      } else {
+        this.missions.rescueTargetSpawned = true;
+        p.team = 2;
+        p.captive = true;
+        p.aiState = 'idle';
+        p.homeX = p.x;
+        p.homeY = p.y;
+      }
     }
 
     // ── automation + army groups ──
@@ -930,7 +954,6 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
     const obj = this.missions.objectives.find((o) => o.def.id === spawnOn);
     if (obj && obj.state === 'done') {
       this.ai.spawnBoss(this.mission);
-      this.missions.bossSpawned = true;
       bus.emit(EV.BANNER, { text: '巨兽现身', sub: this.mission.boss.unitId === 'thornmaw' ? 'THORNMAW · 棘齿巨兽' : 'BOSS' });
       audio.playMusic('boss');
     }

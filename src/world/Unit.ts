@@ -54,6 +54,11 @@ export class Unit extends Entity {
   speed = 0;
 
   targetId = -1;
+  /**
+   * Mission object that must be rescued: while captive it cannot be targeted or damaged by
+   * anyone, so a stray arrow or an AoE cannot silently fail a main objective.
+   */
+  captive = false;
   /** Set when the unit was ordered to attack (must not be dropped while chasing). */
   forcedTarget = false;
 

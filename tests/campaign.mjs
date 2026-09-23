@@ -13,7 +13,10 @@ const TARGET = process.argv[2] ?? 'http://localhost:5173';
 const OUT = fileURLToPath(new URL('../artifacts/', import.meta.url));
 mkdirSync(OUT, { recursive: true });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const MISSIONS = ['m01', 'm02', 'm03', 'm04', 'm05', 'm06', 'm07', 'm08', 'm09', 'm10'];
+const ALL = ['m01', 'm02', 'm03', 'm04', 'm05', 'm06', 'm07', 'm08', 'm09', 'm10'];
+// optional filter: `node tests/campaign.mjs <url> m01,m09`
+const filter = (process.argv[3] ?? '').split(',').filter(Boolean);
+const MISSIONS = filter.length ? ALL.filter((m) => filter.includes(m)) : ALL;
 
 let failures = 0;
 const check = (name, ok, detail = '') => {
@@ -81,7 +84,7 @@ for (const id of MISSIONS) {
 
   // drive the mission to victory: force the counters AND play the gameplay objectives
   for (let step = 0; step < 6; step++) {
-    await page.evaluate(() => {
+    await page.evaluate(async () => {
       const b = window.__AETHERIA_BATTLE__;
       b.speed = 8;
       b.missions.goldDeposited = 9999;
@@ -101,17 +104,41 @@ for (const id of MISSIONS) {
         caravan.y = goal.y;
         b.orders.stop([caravan]);
       }
-      // rescue: hero frees the prisoner, then the prisoner goes home
+      // explore first (the hero has to reach the search point), then the rescue teleport wins
+      // explore: walk the hero onto the map's search point (the real gameplay path)
+      const wantsExplore = b.mission.objectives.find((o) => o.kind === 'explore' && !o.optional);
+      if (wantsExplore && b.map.searchPoints[0] && b.world.hero) {
+        const sp = b.map.searchPoints[0];
+        b.world.hero.x = sp.x + 20;
+        b.world.hero.y = sp.y + 20;
+        b.vision.update(b.world);
+      }
+      // rescue: the hero frees the prisoner and the prisoner goes home. A freed prisoner is
+      // deliberately vulnerable (escorting them is the mission), so do both steps inside one
+      // iteration at real speed — otherwise the scripted player is just too slow.
       const prisoner = b.world.units.find((u) => !u.dead && u.def.id === 'prisoner');
-      if (prisoner && b.world.hero) {
+      const castle = b.world.buildings.find((x) => !x.dead && x.team === 1 && x.def.id === 'castle');
+      const home = castle ?? b.map.playerStart;
+      if (prisoner && prisoner.captive && b.world.hero) {
+        b.speed = 1;
         b.world.hero.x = prisoner.x + 20;
         b.world.hero.y = prisoner.y + 20;
+        await new Promise((r) => setTimeout(r, 300)); // let the objective register the rescue
       }
-      if (prisoner && prisoner.team === 1) {
-        const castle = b.world.buildings.find((x) => !x.dead && x.team === 1 && x.def.id === 'castle');
-        const home = castle ?? b.map.playerStart;
+      if (prisoner && !prisoner.captive) {
         prisoner.x = home.x + 30;
         prisoner.y = home.y + 30;
+        b.speed = 8;
+      }
+      // build: a mission that asks for a barracks must actually get one
+      const wantsBuild = b.mission.objectives.find((o) => o.kind === 'build' && !o.optional);
+      if (wantsBuild?.target?.buildingId) {
+        const have = b.world.buildings.some((x) => !x.dead && x.team === 1 && x.def.id === wantsBuild.target.buildingId);
+        if (!have) {
+          const castle = b.world.buildings.find((x) => x.team === 1 && x.def.id === 'castle');
+          const site = b.world.spawnBuilding(wantsBuild.target.buildingId, castle.x + 190, castle.y + 120, 'dawn', false);
+          b.build.startConstruction(site);
+        }
       }
       // collect: stand on every shrine so it flips to the player
       for (const shrine of b.world.buildings.filter((x) => !x.dead && x.def.id === 'neutral_shrine')) {
@@ -148,7 +175,11 @@ for (const id of MISSIONS) {
       caravan: b.world.units.filter((u) => u.def.id === 'caravan').map((u) => (u.dead ? 'dead' : 'alive')),
     };
   });
-  check(`campaign[${id}]: reaches Victory`, end.ended && end.victory, end.states.join(' '));
+  check(
+    `campaign[${id}]: reaches Victory`,
+    end.ended && end.victory,
+    `${end.states.join(' ')} | shrines ${JSON.stringify(end.shrines)} bossSpawned=${end.bossSpawned} bossAlive=${end.bossAlive} prisoner=${JSON.stringify(end.prisoner)} caravan=${JSON.stringify(end.caravan)}`,
+  );
 }
 
 await page.screenshot({ path: `${OUT}40-campaign.png` });

@@ -221,15 +221,19 @@ export class MissionSystem {
       case 'rescue': {
         const prisoner = world.units.find((u) => !u.dead && u.def.id === 'prisoner');
         if (!prisoner) {
-          o.state = 'failed';
+          // only a real loss fails the objective; a target that never existed (spawn failure)
+          // leaves it open instead of hard-failing the mission
+          if (this.rescueTargetSpawned) o.state = 'failed';
           return;
         }
         const hero = world.hero;
         // freed once the hero reaches the prisoner, then it must reach the castle
         if (!this.prisonerFreed && hero && !hero.dead && Math.hypot(hero.x - prisoner.x, hero.y - prisoner.y) < 90) {
           this.prisonerFreed = true;
+          prisoner.captive = false; // now a real unit: it can be hurt on the way home
           prisoner.faction = 'dawn' as never;
           prisoner.team = 1;
+          prisoner.aiState = 'idle';
         }
         if (this.prisonerFreed) {
           const castle = world.buildings.find((b) => !b.dead && b.team === 1 && b.def.id === 'castle');
@@ -246,7 +250,9 @@ export class MissionSystem {
           break;
         }
         const vision = world.vision;
-        o.progress = !vision || vision.isVisibleWorld(point.x, point.y) ? 1 : 0;
+        // "find X" is satisfied by discovery: walking past it counts, you do not have to keep
+        // a unit parked on it (which was impossible to satisfy after moving on)
+        o.progress = !vision || vision.isExploredWorld(point.x, point.y) ? 1 : 0;
         break;
       }
 
@@ -263,6 +269,8 @@ export class MissionSystem {
   bossSpawned = false;
   /** enemy attack waves that have been survived (drives "hold out" objectives) */
   wavesSurvived = 0;
+  /** set by the battle scene once the rescue target actually exists on the map */
+  rescueTargetSpawned = false;
   private prisonerFreed = false;
 
   // ────────────────────────── event feeds ──────────────────────────

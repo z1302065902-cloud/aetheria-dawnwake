@@ -98,6 +98,9 @@ export class AIController {
     const faction = world.isUnitDef(def.unitId) ? undefined : undefined;
     const boss = world.spawnEnemyUnit(def.unitId, x, y, (faction ?? FACTION.WILDBORN) as any);
     this.boss = boss;
+    // one source of truth: the mission's boss objective reads this flag, so set it here
+    // instead of relying on the caller to remember
+    this.ctx.missions.bossSpawned = true;
     this.bossPhase = 1;
     this.bossAbilityAt = this.ctx.now + 5;
     this.bossSummonAt = this.ctx.now + 8;

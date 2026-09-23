@@ -163,11 +163,15 @@ const gathering = await page.evaluate(() => {
 check('economy: workers harvest and bank gold', gathering.gold > 0 || gathering.gatherStates.some((s) => s.startsWith('gather') || s === 'returnGo'), JSON.stringify(gathering));
 
 // ── build a barracks through the HUD button ─────────────────────────
-// isolate the construction checks: enemy waves are a separate feature (verified later)
+// isolate the construction checks: waves are a separate feature (verified later), and by now
+// the earlier blocks have advanced the clock far enough that a wave is already on the field
+// killing workers — that would decide this check for the wrong reason
 await page.evaluate(() => {
   const b = window.__AETHERIA_BATTLE__;
   b.ai.camps = [];
   b.ai.nextWaveAt = 1e9;
+  for (const u of [...b.world.units]) if (u.team === 2 || u.team === 3) b.world.killUnit(u, 1);
+  for (const u of b.world.units) if (u.team === 1) u.hp = u.maxHp;
 });
 const barracksBtn = await page.evaluate(() => {
   const hud = window.__AETHERIA__.scene.getScene('Hud');
@@ -221,6 +225,8 @@ if (barracksBtn) {
       held: b.automation ? Array.from(b.automation.hold ? b.automation.hold.keys() : []).length : -1,
       speed: b.speed,
       wallet: { gold: Math.round(b.world.wallet.gold), wood: Math.round(b.world.wallet.wood) },
+      deaths: window.__DEATHS__ ?? [],
+      elapsed: Math.round(b.world.elapsed),
     };
   });
   check('build: settlers finish construction', !!built && built.building === false, JSON.stringify(built));

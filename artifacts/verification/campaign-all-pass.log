@@ -1,0 +1,43 @@
+PASS  campaign[m01]: map + base + camps + resources + hero — {"mission":"m01","hasCastle":true,"workers":4,"hero":true,"camps":2,"tents":4,"resources":13,"monsters":7,"searchPoints":1,"objectives":8,"optional":3,"walkablePct":89,"reachable":true,"boss":"thornmaw"}
+PASS  campaign[m01]: hero can path from the base to the enemy camp — walkable 89%
+PASS  campaign[m01]: has main + optional objectives — 8 objectives (3 optional)
+PASS  campaign[m01]: reaches Victory — o1:done o2:done o3:done o4:done o5:done o6:done o7:done o8:active | shrines ["alive/cap=true"] bossSpawned=true bossAlive=false prisoner=[] caravan=[]
+PASS  campaign[m02]: map + base + camps + resources + hero — {"mission":"m02","hasCastle":true,"workers":5,"hero":true,"camps":1,"tents":2,"resources":12,"monsters":7,"searchPoints":2,"objectives":2,"optional":0,"walkablePct":90,"reachable":true,"boss":"thornmaw"}
+PASS  campaign[m02]: hero can path from the base to the enemy camp — walkable 90%
+PASS  campaign[m02]: has main + optional objectives — 2 objectives (0 optional)
+PASS  campaign[m02]: reaches Victory — o1:done o2:done | shrines ["alive/cap=true"] bossSpawned=true bossAlive=false prisoner=[] caravan=["alive"]
+PASS  campaign[m03]: map + base + camps + resources + hero — {"mission":"m03","hasCastle":true,"workers":4,"hero":true,"camps":1,"tents":3,"resources":12,"monsters":8,"searchPoints":2,"objectives":2,"optional":0,"walkablePct":90,"reachable":true,"boss":"thornmaw"}
+PASS  campaign[m03]: hero can path from the base to the enemy camp — walkable 90%
+PASS  campaign[m03]: has main + optional objectives — 2 objectives (0 optional)
+PASS  campaign[m03]: reaches Victory — o1:done o2:done | shrines ["alive/cap=true"] bossSpawned=true bossAlive=false prisoner=[] caravan=[]
+PASS  campaign[m04]: map + base + camps + resources + hero — {"mission":"m04","hasCastle":true,"workers":4,"hero":true,"camps":1,"tents":2,"resources":12,"monsters":9,"searchPoints":2,"objectives":2,"optional":0,"walkablePct":89,"reachable":true,"boss":"thornmaw"}
+PASS  campaign[m04]: hero can path from the base to the enemy camp — walkable 89%
+PASS  campaign[m04]: has main + optional objectives — 2 objectives (0 optional)
+PASS  campaign[m04]: reaches Victory — o1:done o2:done | shrines ["alive/cap=true"] bossSpawned=true bossAlive=false prisoner=["alive/t1"] caravan=[]
+PASS  campaign[m05]: map + base + camps + resources + hero — {"mission":"m05","hasCastle":true,"workers":4,"hero":true,"camps":1,"tents":2,"resources":12,"monsters":10,"searchPoints":2,"objectives":2,"optional":0,"walkablePct":90,"reachable":true,"boss":"thornmaw"}
+PASS  campaign[m05]: hero can path from the base to the enemy camp — walkable 90%
+PASS  campaign[m05]: has main + optional objectives — 2 objectives (0 optional)
+PASS  campaign[m05]: reaches Victory — o1:done o2:done | shrines ["alive/cap=true"] bossSpawned=true bossAlive=false prisoner=[] caravan=[]
+PASS  campaign[m06]: map + base + camps + resources + hero — {"mission":"m06","hasCastle":true,"workers":4,"hero":true,"camps":1,"tents":2,"resources":13,"monsters":11,"searchPoints":2,"objectives":2,"optional":0,"walkablePct":90,"reachable":true,"boss":"thornmaw"}
+PASS  campaign[m06]: hero can path from the base to the enemy camp — walkable 90%
+PASS  campaign[m06]: has main + optional objectives — 2 objectives (0 optional)
+PASS  campaign[m06]: reaches Victory — o1:done o2:done | shrines ["alive/cap=true","alive/cap=true"] bossSpawned=true bossAlive=false prisoner=[] caravan=[]
+PASS  campaign[m07]: map + base + camps + resources + hero — {"mission":"m07","hasCastle":true,"workers":4,"hero":true,"camps":1,"tents":2,"resources":12,"monsters":12,"searchPoints":2,"objectives":2,"optional":0,"walkablePct":88,"reachable":true,"boss":"thornmaw"}
+PASS  campaign[m07]: hero can path from the base to the enemy camp — walkable 88%
+PASS  campaign[m07]: has main + optional objectives — 2 objectives (0 optional)
+PASS  campaign[m07]: reaches Victory — o1:done o2:done | shrines ["alive/cap=true"] bossSpawned=true bossAlive=false prisoner=[] caravan=[]
+PASS  campaign[m08]: map + base + camps + resources + hero — {"mission":"m08","hasCastle":true,"workers":4,"hero":true,"camps":1,"tents":2,"resources":12,"monsters":13,"searchPoints":2,"objectives":2,"optional":0,"walkablePct":89,"reachable":true,"boss":"voidsorcerer"}
+PASS  campaign[m08]: hero can path from the base to the enemy camp — walkable 89%
+PASS  campaign[m08]: has main + optional objectives — 2 objectives (0 optional)
+PASS  campaign[m08]: reaches Victory — o1:done o2:done | shrines ["alive/cap=true"] bossSpawned=true bossAlive=false prisoner=["alive/t1"] caravan=[]
+PASS  campaign[m09]: map + base + camps + resources + hero — {"mission":"m09","hasCastle":true,"workers":4,"hero":true,"camps":1,"tents":2,"resources":12,"monsters":14,"searchPoints":2,"objectives":2,"optional":0,"walkablePct":89,"reachable":true,"boss":"voidsorcerer"}
+PASS  campaign[m09]: hero can path from the base to the enemy camp — walkable 89%
+PASS  campaign[m09]: has main + optional objectives — 2 objectives (0 optional)
+PASS  campaign[m09]: reaches Victory — o1:done o2:done | shrines ["alive/cap=true"] bossSpawned=true bossAlive=false prisoner=[] caravan=[]
+PASS  campaign[m10]: map + base + camps + resources + hero — {"mission":"m10","hasCastle":true,"workers":4,"hero":true,"camps":1,"tents":2,"resources":12,"monsters":15,"searchPoints":2,"objectives":2,"optional":0,"walkablePct":90,"reachable":true,"boss":"ancientdragon"}
+PASS  campaign[m10]: hero can path from the base to the enemy camp — walkable 90%
+PASS  campaign[m10]: has main + optional objectives — 2 objectives (0 optional)
+PASS  campaign[m10]: reaches Victory — o1:done o2:done | shrines ["alive/cap=true"] bossSpawned=true bossAlive=false prisoner=[] caravan=[]
+PASS  campaign: no runtime errors across all ten missions
+
+ALL CAMPAIGN CHECKS PASSED

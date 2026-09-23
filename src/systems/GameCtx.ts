@@ -4,9 +4,12 @@ import type { Pathfinder } from './Pathfinder';
 import type { Unit } from '../world/Unit';
 import type { Building } from '../world/Building';
 import type { Projectile } from '../world/Projectile';
+import type { MissionSystem } from './Mission';
 
 /** Everything a system needs from the battle scene, without importing the scene class. */
 export interface GameCtx {
+  /** objective tracking — systems report progress straight to it (single source of truth) */
+  missions: MissionSystem;
   world: World;
   fx: FxSystem;
   path: Pathfinder;

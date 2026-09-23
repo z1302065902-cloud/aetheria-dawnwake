@@ -17,9 +17,11 @@ export function setupMatch(world: World, mission: MissionDef): MatchSetupResult 
   for (const w of world.map.woodGroves) world.spawnResource('wood', w.x, w.y, w.amount);
   for (const s of world.map.manaShrines) world.spawnResource('mana', s.x, s.y, 0);
 
-  // ── mana shrine structure (capturable) ──
-  const shrineWorld = world.map.manaShrines[0];
-  const shrine = shrineWorld ? world.spawnBuilding('neutral_shrine', shrineWorld.x, shrineWorld.y, FACTION.NEUTRAL) : null;
+  // ── mana shrine structures (capturable) ──
+  // EVERY shrine on the map becomes a capturable building: an objective like "capture two
+  // shrines" is impossible if only the first one exists as a structure.
+  const shrineBuildings = world.map.manaShrines.map((s) => world.spawnBuilding('neutral_shrine', s.x, s.y, FACTION.NEUTRAL));
+  const shrine = shrineBuildings[0] ?? null;
 
   // ── player base ──
   const start = world.map.playerStart;
@@ -38,6 +40,15 @@ export function setupMatch(world: World, mission: MissionDef): MatchSetupResult 
     }
   };
   spawnAround('settler', 4, 78);
+
+  // A "this unit must survive" objective is unsatisfiable if the unit is never given.
+  // m09's brief is literally "smash the altars with the catapult", so hand it over.
+  for (const o of mission.objectives) {
+    if (o.kind !== 'defend' || !o.target?.unitId) continue;
+    const id = o.target.unitId;
+    const exists = world.units.some((u) => !u.dead && u.def.id === id && u.team === 1);
+    if (!exists) spawnAround(id, 1, 120);
+  }
 
   // ── neutral wildlife in the middle of the map ──
   for (const m of world.map.monsters) {
