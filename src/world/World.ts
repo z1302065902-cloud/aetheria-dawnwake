@@ -382,6 +382,11 @@ export class World {
 
   killUnit(unit: Unit, killerTeam: number): void {
     if (unit.dead) return;
+    // defensive: a building has a different death path (site cleanup, objectives, rubble)
+    if ((unit as unknown as { kind?: string }).kind === 'building') {
+      this.killBuilding(unit as unknown as Building, killerTeam);
+      return;
+    }
     if (unit.isHero) {
       const hero = unit as Hero;
       hero.hp = 0;

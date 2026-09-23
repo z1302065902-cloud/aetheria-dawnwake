@@ -39,6 +39,8 @@ export interface AutomationView {
   /** settlers currently assigned to each resource */
   assigned: WorkerMix & { idle: number; building: number };
   total: number;
+  /** live (non-depleted) nodes per resource — 0 means that type is exhausted */
+  available: WorkerMix;
 }
 
 const RESOURCES: ResourceKind[] = ['gold', 'wood', 'mana'];
@@ -94,7 +96,12 @@ export class AutomationSystem {
       if (kind && (u.state === 'gather' || u.state === 'gatherGo' || u.state === 'returnGo')) assigned[kind]++;
       else assigned.idle++;
     }
-    return { settings: { ...this.settings }, mix: { ...this.mix }, assigned, total };
+    const available: WorkerMix = { gold: 0, wood: 0, mana: 0 };
+    for (const r of this.ctx.world.resources) {
+      if (r.dead || r.depleted) continue;
+      available[r.resourceKind]++;
+    }
+    return { settings: { ...this.settings }, mix: { ...this.mix }, assigned, total, available };
   }
 
   /** Manual orders win: automation will not touch these units until the hold expires. */

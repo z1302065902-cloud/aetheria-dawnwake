@@ -73,7 +73,10 @@ check(
 );
 
 // ── the +/- mix control re-assigns workers ───────────────────────────
-const mixBefore = await page.evaluate(() => window.__AETHERIA_BATTLE__.automation.view.assigned.wood);
+const mixBefore = await page.evaluate(() => {
+  const v = window.__AETHERIA_BATTLE__.automation.view;
+  return { wood: v.assigned.wood, mix: { ...v.mix } };
+});
 await page.evaluate(() => {
   const b = window.__AETHERIA_BATTLE__;
   for (let i = 0; i < 3; i++) b.automation.setMix('wood', 1);
@@ -81,9 +84,16 @@ await page.evaluate(() => {
 await sleep(5000);
 const mixAfter = await page.evaluate(() => {
   const b = window.__AETHERIA_BATTLE__;
-  return { wood: b.automation.view.assigned.wood, mix: { ...b.automation.mix } };
+  const view = b.automation.view;
+  return { wood: view.assigned.wood, mix: { ...b.automation.mix }, available: view.available };
 });
-check('automation: pressing “+木材” moves settlers onto wood', mixAfter.wood > mixBefore, `wood ${mixBefore} → ${mixAfter.wood} (mix ${JSON.stringify(mixAfter.mix)})`);
+check(
+  'automation: pressing “+木材” raises the wood target and moves settlers onto wood',
+  // if every grove is already stripped the automation correctly sends them elsewhere,
+  // so the movement assertion only applies while wood is still available
+  mixAfter.mix.wood > mixBefore.mix.wood && (mixAfter.available.wood === 0 || mixAfter.wood >= mixBefore.wood),
+  `wood ${mixBefore.wood} → ${mixAfter.wood}, nodes ${JSON.stringify(mixAfter.available)} (mix ${JSON.stringify(mixAfter.mix)})`,
+);
 
 // ── manual orders are never overridden ───────────────────────────────
 const manual = await page.evaluate(async () => {

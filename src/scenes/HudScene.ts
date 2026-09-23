@@ -865,8 +865,10 @@ export class HudScene extends Phaser.Scene {
 
     // ── single-player panel ──
     const wk = st.workers;
+    const exhausted =
+      wk.available.wood === 0 ? '　木材已耗尽' : wk.available.gold === 0 ? '　矿脉已耗尽' : '';
     this.workerText.setText(
-      `工人 ${wk.total}　金 ${wk.assigned.gold} / 木 ${wk.assigned.wood} / 晶 ${wk.assigned.mana}${wk.assigned.idle ? `　闲置 ${wk.assigned.idle}` : ''}${wk.assigned.building ? `　建造 ${wk.assigned.building}` : ''}\n配比  金 ${wk.mix.gold} · 木 ${wk.mix.wood} · 晶 ${wk.mix.mana}（点 −/+ 调整，自动重新分配）`,
+      `工人 ${wk.total}　金 ${wk.assigned.gold} / 木 ${wk.assigned.wood} / 晶 ${wk.assigned.mana}${wk.assigned.idle ? `　闲置 ${wk.assigned.idle}` : ''}${wk.assigned.building ? `　建造 ${wk.assigned.building}` : ''}${exhausted}\n配比  金 ${wk.mix.gold} · 木 ${wk.mix.wood} · 晶 ${wk.mix.mana}（点 −/+ 调整，自动重新分配）`,
     );
     for (let i = 0; i < this.armyTexts.length; i++) {
       const g = st.armies[i];

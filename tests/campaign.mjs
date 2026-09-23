@@ -91,7 +91,7 @@ for (const id of MISSIONS) {
       // gameplay path works)
       for (const bd of [...b.world.buildings.filter((x) => x.team === 2)]) {
         b.missions.buildingsDestroyed.set(bd.def.id, (b.missions.buildingsDestroyed.get(bd.def.id) ?? 0) + 1);
-        b.world.killUnit(bd, 1);
+        b.world.killBuilding(bd, 1);
       }
       // escort: walk the caravan onto the goal
       const caravan = b.world.units.find((u) => !u.dead && u.def.id === 'caravan');

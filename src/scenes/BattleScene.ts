@@ -101,6 +101,8 @@ export interface HudState {
     total: number;
     assigned: { gold: number; wood: number; mana: number; idle: number; building: number };
     mix: { gold: number; wood: number; mana: number };
+    /** live nodes per resource (0 = exhausted, the automation will not send anyone there) */
+    available: { gold: number; wood: number; mana: number };
     autoWorker: boolean;
     autoProduction: boolean;
     autoAttack: boolean;
@@ -1066,6 +1068,7 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
         total: this.automation.view.total,
         assigned: this.automation.view.assigned,
         mix: this.automation.view.mix,
+        available: this.automation.view.available,
         autoWorker: this.automation.settings.autoWorker,
         autoProduction: this.automation.settings.autoProduction,
         autoAttack: this.automation.settings.autoAttack,
