@@ -87,8 +87,11 @@ for (const id of MISSIONS) {
       b.missions.goldDeposited = 9999;
       b.missions.producedCombatUnits = 99;
       b.missions.unitsKilledByPlayer = 99;
-      for (const bd of b.world.buildings.filter((x) => x.team === 2)) {
+      // really destroy the enemy structures (bumping the counter alone would not prove the
+      // gameplay path works)
+      for (const bd of [...b.world.buildings.filter((x) => x.team === 2)]) {
         b.missions.buildingsDestroyed.set(bd.def.id, (b.missions.buildingsDestroyed.get(bd.def.id) ?? 0) + 1);
+        b.world.killUnit(bd, 1);
       }
       // escort: walk the caravan onto the goal
       const caravan = b.world.units.find((u) => !u.dead && u.def.id === 'caravan');
@@ -121,9 +124,8 @@ for (const id of MISSIONS) {
       b.missions.wavesSurvived = 9;
       // survive: push the match clock
       if (b.mission.objectives.some((o) => o.kind === 'survive' && !o.optional)) b.world.elapsed = Math.max(b.world.elapsed, 600);
-      // boss
-      if (!b.ai.bossSpawned) b.ai.spawnBoss(b.mission);
-      b.missions.bossSpawned = true;
+      // boss: only spawns once the camp is gone, then must die to the player
+      if (!b.missions.bossSpawned) b.ai.spawnBoss(b.mission);
       if (b.ai.boss && !b.ai.boss.dead) b.world.killUnit(b.ai.boss, 1);
     });
     await sleep(700);
@@ -135,7 +137,16 @@ for (const id of MISSIONS) {
   } catch { /* asserted below */ }
   const end = await page.evaluate(() => {
     const b = window.__AETHERIA_BATTLE__;
-    return { ended: b.isEnded, victory: b.missions.victory, states: b.missions.objectives.map((o) => `${o.def.id}:${o.state}`) };
+    return {
+      ended: b.isEnded,
+      victory: b.missions.victory,
+      states: b.missions.objectives.map((o) => `${o.def.id}:${o.state}`),
+      shrines: b.world.buildings.filter((x) => x.def.id === 'neutral_shrine').map((x) => `${x.dead ? 'dead' : 'alive'}/cap=${x.captured}`),
+      bossSpawned: b.missions.bossSpawned,
+      bossAlive: !!b.ai.boss && !b.ai.boss.dead,
+      prisoner: b.world.units.filter((u) => u.def.id === 'prisoner').map((u) => `${u.dead ? 'dead' : 'alive'}/t${u.team}`),
+      caravan: b.world.units.filter((u) => u.def.id === 'caravan').map((u) => (u.dead ? 'dead' : 'alive')),
+    };
   });
   check(`campaign[${id}]: reaches Victory`, end.ended && end.victory, end.states.join(' '));
 }
