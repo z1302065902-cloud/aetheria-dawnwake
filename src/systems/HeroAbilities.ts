@@ -77,7 +77,8 @@ export class HeroAbilities {
 
     hero.mana -= skill.manaCost;
     hero.cooldowns[skillId] = skill.cooldown;
-    const dmgMul = (1 + hero.equipment.skillDamage / 100) * hero.skillDamageMul;
+    // Relic: Hero — amplify every skill the hero casts
+    const dmgMul = (1 + hero.equipment.skillDamage / 100) * hero.skillDamageMul * (1 + this.ctx.world.mods.heroDamage);
     const dmg = skill.damage * dmgMul;
     const now = this.ctx.now;
     audio.sfx('skill', 0.55);
@@ -233,7 +234,7 @@ export class HeroAbilities {
       } else if (now >= ch.tickAt) {
         ch.tickAt = now + (ch.skill.kind === 'spin' ? 0.38 : 0.5);
         if (ch.skill.kind === 'spin') {
-          const dmg = ch.skill.damage * (1 + hero.equipment.skillDamage / 100) * hero.skillDamageMul / 4;
+          const dmg = ch.skill.damage * (1 + hero.equipment.skillDamage / 100) * hero.skillDamageMul * (1 + this.ctx.world.mods.heroDamage) / 4;
           this.combat.areaDamage(hero.x, hero.y, ch.skill.radius, dmg, ch.skill.damageType, hero.team, hero.id, 12);
           this.ctx.fx.burst('fx_slash', hero.x, hero.y, 1, 40, 0.2, 1.2);
           audio.sfx('swordHeavy', 0.22);

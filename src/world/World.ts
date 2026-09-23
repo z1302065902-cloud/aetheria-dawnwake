@@ -13,6 +13,7 @@ import type { BuildingDef, UnitDef } from '../data/types';
 import { isWalkable, tileAt, worldToTile, type GeneratedMap } from './MapGen';
 import { Pathfinder } from '../systems/Pathfinder';
 import type { FxSystem } from '../fx/FxSystem';
+import { emptyModifiers, type MatchModifiers } from '../systems/Relics';
 
 const ARMOR_MATRIX: Record<string, Record<string, number>> = {
   physical: { light: 1.12, medium: 1.0, heavy: 0.82, fortified: 0.7 },
@@ -42,6 +43,8 @@ export class World {
   private byId = new Map<number, Unit | Building | ResourceNode>();
 
   wallet: Record<ResourceId, number> = { gold: 0, wood: 0, mana: 0 };
+  /** Live Roguelite relic bonuses for this match (set by the battle scene). */
+  mods: MatchModifiers = emptyModifiers();
   popUsed = 0;
   popMax = CFG.POP_BASE;
   elapsed = 0;
@@ -86,6 +89,15 @@ export class World {
     if (!this.scene.textures.exists(key)) {
       throw new Error(`[world] missing unit texture: ${key}`);
     }
+    // relic bonuses are applied at spawn so every spawn path (production, rescue,
+    // scripted spawns) gets them for free
+    if (finalFaction === FACTION.PLAYER) {
+      if (!unit.isHero && unit.def.role === 'melee' && this.mods.meleeHp) {
+        unit.maxHp = Math.round(unit.maxHp * (1 + this.mods.meleeHp));
+        unit.hp = unit.maxHp;
+      }
+      if (this.mods.unitSpeed) unit.speed *= 1 + this.mods.unitSpeed;
+    }
     const meta = metaOf(key);
     unit.sprite = this.scene.add
       .image(x, y, key)
@@ -107,6 +119,10 @@ export class World {
     const b = new Building(x, y, def, finalFaction);
     b.construction = complete ? 1 : 0.02;
     b.building = !complete;
+    if (finalFaction === FACTION.PLAYER && this.mods.buildingHp) {
+      b.maxHp = Math.round(b.maxHp * (1 + this.mods.buildingHp));
+      b.hp = b.maxHp;
+    }
     const key = `b_${def.id}`;
     const meta = metaOf(key);
     b.sprite = this.scene.add

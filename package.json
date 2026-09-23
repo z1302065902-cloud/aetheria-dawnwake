@@ -12,7 +12,11 @@
     "typecheck": "tsc --noEmit",
     "test": "node tests/smoke.mjs",
     "test:prod": "node tests/smoke.mjs http://localhost:4173",
-    "capture": "node tests/capture.mjs"
+    "capture": "node tests/capture.mjs",
+    "test:layout": "node tests/layout.mjs",
+    "test:soak": "node tests/soak.mjs",
+    "test:gpu": "node tests/perf-gpu.mjs",
+    "test:gpu:uncapped": "UNCAPPED=1 node tests/perf-gpu.mjs"
   },
   "dependencies": {
     "phaser": "^3.88.2"

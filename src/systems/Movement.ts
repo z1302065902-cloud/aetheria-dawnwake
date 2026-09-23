@@ -3,22 +3,27 @@ import { worldToTile } from '../world/MapGen';
 import type { GameCtx } from './GameCtx';
 import type { Unit } from '../world/Unit';
 
+export interface Point {
+  x: number;
+  y: number;
+}
+
 /**
- * Movement + collision. Units follow A* waypoints, slide along blocked tiles, push
- * each other apart (local avoidance) and get pushed out of building footprints.
+ * Movement + collision. Units follow A* waypoints, slide along blocked tiles, keep
+ * clear of each other (position-based relaxation) and get pushed out of building
+ * footprints when they end up deep inside one.
  * Everything is O(n · neighbours) through the spatial hash — no physics engine.
  */
 export class MovementSystem {
-  private neighbours: Unit[] = [];
-
   constructor(private ctx: GameCtx) {}
 
   update(dt: number): void {
     const { world } = this.ctx;
     const units = world.units;
-    // Order matters: overlap recovery runs FIRST (deep overlaps only), then movement,
-    // then local avoidance. Running the recovery last would silently cancel the
-    // movement of every unit standing near a building edge.
+    // Order matters:
+    //   1. overlap recovery FIRST (deep overlaps only, and it must not fight movement)
+    //   2. movement (path following)
+    //   3. separation accumulate + apply (after movement so it corrects what moved)
     for (const u of units) {
       if (u.dead) continue;
       this.resolveBlockers(u);
@@ -28,11 +33,24 @@ export class MovementSystem {
       u.stuckTimer = u.stuckTimer ?? 0;
       this.stepUnit(u, dt);
     }
+    // separation is accumulated for everyone first (a pair may touch a unit that was
+    // already processed, so the per-unit accumulator must be cleared in its own pass)
     for (const u of units) {
       if (u.dead) continue;
-      this.separate(u);
+      u.pushX = 0;
+      u.pushY = 0;
+    }
+    for (const u of units) {
+      if (u.dead) continue;
+      this.accumulateSeparation(u);
+    }
+    for (const u of units) {
+      if (u.dead) continue;
+      this.applySeparation(u);
     }
   }
+
+  // ────────────────────────── path following ──────────────────────────
 
   private stepUnit(u: Unit, dt: number): void {
     const speed = u.moveSpeed;
@@ -68,7 +86,8 @@ export class MovementSystem {
       u.y = ny;
       return true;
     };
-    const before = { x: u.x, y: u.y };
+    const beforeX = u.x;
+    const beforeY = u.y;
     if (!tryMove(u.x + dx, u.y + dy)) {
       const okX = tryMove(u.x + dx, u.y);
       const okY = !okX && tryMove(u.x, u.y + dy);
@@ -78,7 +97,7 @@ export class MovementSystem {
         if (!tryMove(u.x, u.y + Math.abs(dx) * side)) tryMove(u.x + Math.abs(dy) * side, u.y);
       }
     }
-    const moved = Math.hypot(u.x - before.x, u.y - before.y);
+    const moved = Math.hypot(u.x - beforeX, u.y - beforeY);
     if (moved < 0.35) {
       u.stuckTimer += 1;
       if (u.stuckTimer > 40 && u.path.length > 0) {
@@ -92,39 +111,77 @@ export class MovementSystem {
     }
   }
 
-  private separate(u: Unit): void {
+  // ────────────────────────── local avoidance ──────────────────────────
+
+  /**
+   * Local avoidance, position based: every overlapping pair is relaxed exactly once per
+   * frame (mass weighted, capped, never pushed into a blocked tile). A weak soft push is
+   * not enough — 20 units funnelling through a bridge would otherwise end up stacked.
+   */
+  private accumulateSeparation(u: Unit): void {
     const { world } = this.ctx;
-    const out = this.neighbours;
-    world.hashUnits.query(u.x, u.y, CFG.SEPARATION_RADIUS, out);
-    if (out.length <= 1) return;
-    let px = 0;
-    let py = 0;
-    let count = 0;
-    for (const o of out) {
-      if (o === u || o.dead) continue;
-      const dx = u.x - o.x;
-      const dy = u.y - o.y;
-      const minDist = u.radius + o.radius - 2;
+    const reach = u.radius + 46;
+    world.hashUnits.forEachNear(u.x, u.y, reach, (o) => {
+      if (o.dead || o === u || o.id < u.id) return; // each pair is relaxed once
+      let dx = o.x - u.x;
+      let dy = o.y - u.y;
+      const minDist = (u.radius + o.radius) * 0.95;
       const d2 = dx * dx + dy * dy;
-      if (d2 >= minDist * minDist || d2 < 0.0001) continue;
-      const d = Math.sqrt(d2);
-      const push = (minDist - d) / minDist;
-      const weight = o.kind === 'unit' ? 1 : 1;
-      px += (dx / d) * push * weight;
-      py += (dy / d) * push * weight;
-      count++;
-      if (count > 8) break;
+      if (d2 >= minDist * minDist) return;
+      let d = Math.sqrt(d2);
+      if (d < 0.01) {
+        // exactly stacked: deterministic direction from the id so the pair separates
+        // instead of oscillating around the same pixel
+        const ang = (u.id * 2.399963) % (Math.PI * 2);
+        dx = Math.cos(ang);
+        dy = Math.sin(ang);
+        d = 1;
+      }
+      const overlap = minDist - d;
+      const nx = dx / d;
+      const ny = dy / d;
+      // heavier (bigger) units yield less ground: the boss shoves footmen, not vice versa
+      const total = u.radius + o.radius;
+      const uShare = o.radius / total;
+      const oShare = u.radius / total;
+      const corr = Math.min(overlap, 3) * 2;
+      u.pushX -= nx * corr * uShare;
+      u.pushY -= ny * corr * uShare;
+      o.pushX += nx * corr * oShare;
+      o.pushY += ny * corr * oShare;
+    });
+  }
+
+  /** Applies the accumulated separation with a per-frame cap and tile validation. */
+  private applySeparation(u: Unit): void {
+    const { path } = this.ctx;
+    let px = u.pushX;
+    let py = u.pushY;
+    u.pushX = 0;
+    u.pushY = 0;
+    const mag = Math.hypot(px, py);
+    if (mag < 0.05) return;
+    const cap = 6;
+    if (mag > cap) {
+      px = (px / mag) * cap;
+      py = (py / mag) * cap;
     }
-    if (count === 0) return;
-    const strength = 28 * Math.min(1, count / 4);
-    u.x += px * strength * (1 / 60);
-    u.y += py * strength * (1 / 60);
+    const nx = u.x + px;
+    const ny = u.y + py;
+    if (path.isFree(Math.floor(nx / TILE), Math.floor(ny / TILE))) {
+      u.x = nx;
+      u.y = ny;
+    } else if (path.isFree(Math.floor(nx / TILE), Math.floor(u.y / TILE))) {
+      u.x = nx;
+    } else if (path.isFree(Math.floor(u.x / TILE), Math.floor(ny / TILE))) {
+      u.y = ny;
+    }
   }
 
   /**
    * Safety net for units that end up *inside* a building (spawn overlap, knockback).
-   * Only deep penetration is corrected: A* already keeps walkable paths out of
-   * building tiles, so grazing the expanded box must not fight normal movement.
+   * Only deep penetration is corrected: A* already keeps walkable paths out of building
+   * tiles, so grazing the expanded box must not fight normal movement.
    */
   private resolveBlockers(u: Unit): void {
     const { world, path } = this.ctx;
@@ -138,7 +195,6 @@ export class MovementSystem {
       const ox = hw - Math.abs(dx);
       const oy = hh - Math.abs(dy);
       if (ox <= 0 || oy <= 0) return;
-      // centre is inside the (slack-expanded) footprint: move it to the nearest edge
       if (ox < oy) {
         const nx = b.x + Math.sign(dx || 1) * hw;
         const { tx, ty } = worldToTile(nx, u.y);
@@ -153,7 +209,30 @@ export class MovementSystem {
     u.y = Math.max(8, Math.min(world.map.h * TILE - 8, u.y));
   }
 
-  /** Shared path assignment for a group order (single A* per order, spread destinations). */
+  // ────────────────────────── group orders ──────────────────────────
+
+  /** Grid formation slots (local space) for a group of `count` units. */
+  private formationSlots(count: number, spacing = 34): Point[] {
+    if (count <= 1) return [{ x: 0, y: 0 }];
+    const cols = Math.max(1, Math.ceil(Math.sqrt(count)));
+    const rows = Math.ceil(count / cols);
+    const slots: Point[] = [];
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        slots.push({
+          x: (c - (cols - 1) / 2) * spacing,
+          y: (r - (rows - 1) / 2) * spacing,
+        });
+      }
+    }
+    return slots;
+  }
+
+  /**
+   * Shared path assignment for a group order: ONE A* search for the whole group, then
+   * each unit gets a formation slot at the destination (assigned nearest-first so units
+   * do not cross each other on the way there).
+   */
   moveGroup(units: Unit[], targetX: number, targetY: number, onArriveEach: (u: Unit) => void): void {
     const { path } = this.ctx;
     if (units.length === 0) return;
@@ -170,17 +249,46 @@ export class MovementSystem {
     const to = worldToTile(targetX, targetY);
     const shared = path.findPath(from.tx, from.ty, to.tx, to.ty);
 
-    units.forEach((u, i) => {
-      // ring offsets so 20 units do not stack on the same pixel
-      const ring = Math.floor(i / 6);
-      const ang = (i % 6) * (Math.PI / 3) + ring * 0.5;
-      const spread = ring === 0 ? 0 : 16 + ring * 12;
-      const ox = Math.cos(ang) * spread;
-      const oy = Math.sin(ang) * spread;
-      u.path = shared ? shared.map((p, idx) => (idx === shared.length - 1 ? { x: p.x + ox, y: p.y + oy } : { x: p.x, y: p.y })) : [{ x: targetX + ox, y: targetY + oy }];
+    const slots = this.formationSlots(units.length);
+    const taken = new Set<number>();
+    units.forEach((u) => {
+      let best = 0;
+      let bestD = Infinity;
+      for (let i = 0; i < slots.length; i++) {
+        if (taken.has(i)) continue;
+        const sx = targetX + slots[i].x;
+        const sy = targetY + slots[i].y;
+        const d = (u.x - sx) ** 2 + (u.y - sy) ** 2;
+        if (d < bestD) {
+          bestD = d;
+          best = i;
+        }
+      }
+      taken.add(best);
+
+      // the slot must land on walkable ground, otherwise fall back to the destination
+      let gx = targetX + slots[best].x;
+      let gy = targetY + slots[best].y;
+      const t = worldToTile(gx, gy);
+      const free = path.nearestFree(t.tx, t.ty, 3);
+      if (free) {
+        gx = free.tx * TILE + TILE / 2;
+        gy = free.ty * TILE + TILE / 2;
+      } else {
+        gx = targetX;
+        gy = targetY;
+      }
+
+      if (shared && shared.length > 0) {
+        u.path = shared.map((p, idx) => (idx === shared.length - 1 ? { x: gx, y: gy } : { x: p.x, y: p.y }));
+      } else {
+        u.path = [{ x: gx, y: gy }];
+      }
       u.pathIndex = 0;
-      u.goalX = targetX + ox;
-      u.goalY = targetY + oy;
+      u.goalX = gx;
+      u.goalY = gy;
+      u.chaseGoalX = gx;
+      u.chaseGoalY = gy;
       u.repathAt = this.ctx.now + CFG.REPATH_COOLDOWN / 1000;
       onArriveEach(u);
     });

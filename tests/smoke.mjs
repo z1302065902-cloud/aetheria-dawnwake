@@ -411,6 +411,138 @@ const defeatState = await page.evaluate(() => {
 check('mission: losing the castle ends in defeat', defeat.castleGone && defeatState.ended && defeatState.defeat, JSON.stringify({ ...defeat, ...defeatState }));
 await page.screenshot({ path: `${OUT}04-defeat.png` });
 
+// ── relics: the permanent bonuses must actually be applied ──────────
+// 1) grant relics in the save and restart, so the match modifiers are built from it
+await page.evaluate(() => {
+  const raw = JSON.parse(window.localStorage.getItem('aetheria.dawnwake.save.v1') || '{}');
+  raw.hero = raw.hero || {};
+  raw.hero.relics = ['flameRelic', 'warriorRelic', 'heroRelic', 'bannerRelic', 'harvestRate'];
+  window.localStorage.setItem('aetheria.dawnwake.save.v1', JSON.stringify(raw));
+});
+await page.reload({ waitUntil: 'load' });
+await page.waitForFunction(() => window.__AETHERIA__ && window.__AETHERIA__.scene.isActive('Menu'), null, { timeout: 30000 });
+await page.evaluate(() => {
+  window.__AETHERIA__.scene.getScene('Menu').scene.start('Battle', { missionId: 'm01', heroId: 'knightCommander' });
+});
+await page.waitForFunction(() => !!window.__AETHERIA_BATTLE__, null, { timeout: 30000 });
+await sleep(1500);
+
+const relicMods = await page.evaluate(() => {
+  const b = window.__AETHERIA_BATTLE__;
+  return { mods: { ...b.world.mods }, hudLines: b.getHudState().relicLines };
+});
+check(
+  'relics: save -> live match modifiers',
+  relicMods.mods.fireDamage === 0.1 && relicMods.mods.meleeHp === 0.08 && relicMods.mods.heroDamage === 0.12 && relicMods.mods.unitSpeed === 0.06 && relicMods.hudLines.length === 4,
+  JSON.stringify(relicMods),
+);
+
+// 2) flame relic: magic damage from the player must be exactly 10% higher
+const magicCompare = await page.evaluate(() => {
+  const b = window.__AETHERIA_BATTLE__;
+  const mk = () => b.world.spawnUnit('raider', 400, 2600, 'wildborn');
+  const targetA = mk();
+  const targetB = mk();
+  b.world.mods.fireDamage = 0.1;
+  const boosted = b.combat.applyDamage(targetA, 100, 'magic', 1, b.world.hero.id, false);
+  b.world.mods.fireDamage = 0;
+  const plain = b.combat.applyDamage(targetB, 100, 'magic', 1, b.world.hero.id, false);
+  b.world.mods.fireDamage = 0.1;
+  b.world.killUnit(targetA, 1);
+  b.world.killUnit(targetB, 1);
+  return { boosted, plain, ratio: boosted / plain };
+});
+check('relics: flame relic gives +10% magic damage', Math.abs(magicCompare.ratio - 1.1) < 0.001, `boosted ${magicCompare.boosted.toFixed(2)} vs plain ${magicCompare.plain.toFixed(2)} → ×${magicCompare.ratio.toFixed(3)}`);
+
+// 3) warrior relic: melee units spawn with +8% HP (150 -> 162)
+const meleeHp = await page.evaluate(() => {
+  const b = window.__AETHERIA_BATTLE__;
+  b.world.mods.meleeHp = 0.08;
+  const footman = b.world.spawnUnit('footman', 500, 2600, 'dawn');
+  const archer = b.world.spawnUnit('archer', 540, 2600, 'dawn');
+  const out = { footmanMax: footman.maxHp, archerMax: archer.maxHp };
+  b.world.killUnit(footman, 2);
+  b.world.killUnit(archer, 2);
+  return out;
+});
+check('relics: warrior relic gives melee units +8% max HP (150→162)', meleeHp.footmanMax === 162 && meleeHp.archerMax === 92, JSON.stringify(meleeHp));
+
+// ── formation: 20 units must cross a bridge without stacking ────────
+const bridge = await page.evaluate(() => {
+  const b = window.__AETHERIA_BATTLE__;
+  // Isolate the measurement: no enemy units, no camp production, no incoming waves.
+  for (const u of [...b.world.units]) if (u.team !== 1) b.world.killUnit(u, 1);
+  b.ai.camps = [];
+  b.ai.nextWaveAt = 1e9;
+  b.ai.bossSpawned = true; // keep the boss out of this test
+  b.paused = false;
+  b.speed = 4;
+  b.world.wallet.gold = 9999;
+  b.world.wallet.wood = 9999;
+  const west = b.world.map.landings[2];   // west mouth of the southern bridge
+  const east = b.world.map.landings[3];   // east mouth
+  const squad = [];
+  for (let i = 0; i < 20; i++) {
+    const ang = (i / 20) * Math.PI * 2;
+    const u = b.world.spawnUnit(i % 4 === 0 ? 'archer' : 'footman', west.x + Math.cos(ang) * 150 - 60, west.y + Math.sin(ang) * 150, 'dawn');
+    u.team = 1;
+    squad.push(u);
+  }
+  b.world.recomputePop();
+  b.orders.move(squad, east.x, east.y, false);
+  window.__SQUAD__ = squad;
+  window.__START_X__ = west.x;
+  window.__TARGET_X__ = east.x;
+  return { west, east, count: squad.length };
+});
+check('formation: 20 units ordered across the bridge', bridge.count === 20, JSON.stringify({ west: bridge.west, east: bridge.east }));
+
+try {
+  await page.waitForFunction(
+    () => {
+      const squad = window.__SQUAD__ || [];
+      return squad.filter((u) => !u.dead).every((u) => u.path.length === 0);
+    },
+    null,
+    { timeout: 60000 },
+  );
+} catch { /* measured below regardless */ }
+
+const formationResult = await page.evaluate(() => {
+  const squad = (window.__SQUAD__ || []).filter((u) => !u.dead);
+  let worstRatio = Infinity;
+  let worstPair = null;
+  for (let i = 0; i < squad.length; i++) {
+    for (let j = i + 1; j < squad.length; j++) {
+      const a = squad[i];
+      const c = squad[j];
+      const dist = Math.hypot(a.x - c.x, a.y - c.y);
+      const ratio = dist / (a.radius + c.radius);
+      if (ratio < worstRatio) {
+        worstRatio = ratio;
+        worstPair = [Math.round(dist), a.radius + c.radius];
+      }
+    }
+  }
+  const b = window.__AETHERIA_BATTLE__;
+  const target = b.world.map.landings[3];
+  const arrived = squad.filter((u) => Math.hypot(u.x - target.x, u.y - target.y) < 200).length;
+  // "crossed the river": on the bridge or on its east side (the river runs north-south)
+  const onEastSide = squad.filter((u) => u.x > (window.__START_X__ + window.__TARGET_X__) / 2).length;
+  const stillPathing = squad.filter((u) => u.path.length > 0).length;
+  return { count: squad.length, worstRatio, worstPair, arrived, onEastSide, stillPathing };
+});
+check(
+  'formation: no two units overlap closer than 0.8×(r1+r2) after crossing',
+  formationResult.worstRatio >= 0.8,
+  `worst gap ratio ${formationResult.worstRatio.toFixed(2)} (dist/radii ${JSON.stringify(formationResult.worstPair)}) · arrived ${formationResult.arrived}/${formationResult.count} · east ${formationResult.onEastSide}`,
+);
+check(
+  'formation: the squad actually crossed the bridge',
+  formationResult.onEastSide >= formationResult.count * 0.8,
+  `east side ${formationResult.onEastSide}/${formationResult.count} · arrived ${formationResult.arrived} · still pathing ${formationResult.stillPathing}`,
+);
+
 // ── performance: simulation budget (headless-GPU independent) ───────
 // The previous match ended (defeat), and a finished match freezes the simulation —
 // so restart into a live match first, otherwise the numbers below are meaningless.

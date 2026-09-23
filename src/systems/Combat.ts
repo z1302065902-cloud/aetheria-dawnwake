@@ -106,6 +106,7 @@ export class CombatSystem implements ProjectilePoolApi {
   }
 
   private performAttack(u: Unit, target: Target): void {
+    const world = this.ctx.world;
     const def = u.def;
     u.cooldown = def.attackCooldown / Math.max(0.35, this.attackSpeedMulOf(u));
     u.swing = 0.22;
@@ -116,6 +117,8 @@ export class CombatSystem implements ProjectilePoolApi {
     let crit = false;
     if (u instanceof Hero) {
       damage = u.attackTotal;
+      // Relic: Hero — the commander's own damage output is amplified
+      if (world.mods.heroDamage) damage *= 1 + world.mods.heroDamage;
       let critChance = u.critChance + u.equipment.crit / 100;
       for (const b of u.buffs) critChance += b.critAdd ?? 0;
       if (Math.random() < critChance) {
@@ -250,7 +253,12 @@ export class CombatSystem implements ProjectilePoolApi {
     const { world, fx } = this.ctx;
     if (target.dead) return 0;
     if (this.ctx.now < this.invulnUntil(target)) return 0;
-    const dealt = world.damage(target, amount, type, team, crit);
+    // Relic: Flame — magic damage dealt by the player team is amplified
+    let finalAmount = amount;
+    if (team === 1 && type === 'magic' && world.mods.fireDamage) {
+      finalAmount = amount * (1 + world.mods.fireDamage);
+    }
+    const dealt = world.damage(target, finalAmount, type, team, crit);
     if (dealt <= 0) return 0;
     const isEnemyOfView = target.team !== 1;
     fx.damageText(target.x, target.y - target.radius * 0.9, dealt, crit ? 'crit' : 'damage');

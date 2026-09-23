@@ -20,6 +20,8 @@ export class EconomySystem {
 
   update(dt: number): void {
     const { world } = this.ctx;
+    // Relic: Harvest — gather speed bonus for this match
+    this.harvestMul = 1 + world.mods.harvestRate;
     for (const u of world.units) {
       if (u.dead || u.def.role !== 'worker') continue;
       if (u.team !== 1 && u.aiState === 'idle') continue;
@@ -97,10 +99,12 @@ export class EconomySystem {
         if (dist < depot.radius + 22) {
           const carry = u.carrying;
           if (carry && carry.amount > 0) {
-            world.addResource(carry.kind, carry.amount);
-            this.ctx.onResourceDeposited?.(carry.kind, carry.amount);
+            // Relic: Harvest — extra resources per trip
+            const amount = carry.amount * (1 + world.mods.goldGain);
+            world.addResource(carry.kind, amount);
+            this.ctx.onResourceDeposited?.(carry.kind, amount);
             audio.sfx('deposit', 0.2);
-            this.ctx.fx.damageText(u.x, u.y - 20, carry.amount, 'mana');
+            this.ctx.fx.damageText(u.x, u.y - 20, amount, 'mana');
           }
           u.carrying = null;
           const node = world.entityById(u.resourceId) as ResourceNode | undefined;

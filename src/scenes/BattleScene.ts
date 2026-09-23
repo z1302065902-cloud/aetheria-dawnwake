@@ -28,6 +28,7 @@ import { getBuilding, BUILD_ORDER, BUILDINGS } from '../data/buildings';
 import { getUnit } from '../data/units';
 import { SKILLS } from '../data/heroes';
 import { save } from '../core/SaveManager';
+import { buildModifiers, describeModifiers } from '../systems/Relics';
 import type { MissionDef } from '../data/types';
 
 export interface HudAbilityView {
@@ -83,6 +84,8 @@ export interface HudState {
   paused: boolean;
   ended: boolean;
   fps: number;
+  /** Human readable list of the live relic bonuses (shown in the pause overlay). */
+  relicLines: string[];
 }
 
 /** The playable match: world + every system + input. One instance per mission. */
@@ -163,6 +166,9 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
     this.fx = new FxSystem(this);
     this.world = new World(this, this.map, this.fx);
     this.path = this.world.pathfinder;
+    // Roguelite progression: the permanent relics bought in previous runs are turned
+    // into live match modifiers before anything is spawned.
+    this.world.mods = buildModifiers(save.current.hero.relics);
 
     this.selection = new SelectionSystem(this.world);
     this.movement = new MovementSystem(this);
@@ -232,6 +238,10 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
 
     audio.playMusic('battle');
     bus.emit(EV.TOAST, this.mission.name + ' · ' + this.mission.brief);
+    const relicLines = describeModifiers(this.world.mods);
+    if (relicLines.length > 0) {
+      bus.emit(EV.BANNER, { text: `遗物生效 ×${relicLines.length}`, sub: relicLines.join(' · ') });
+    }
     // Debug hook (also used by the automated smoke test / bot playtest).
     (window as unknown as { __AETHERIA_BATTLE__?: BattleScene }).__AETHERIA_BATTLE__ = this;
   }
@@ -820,6 +830,7 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
       paused: this.paused,
       ended: this.ended,
       fps,
+      relicLines: describeModifiers(w.mods),
     };
   }
 

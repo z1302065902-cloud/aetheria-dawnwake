@@ -81,6 +81,9 @@ export class Unit extends Entity {
   queue: QueuedCommand[] = [];
   /** frames without progress, used by the movement system's stuck detection */
   stuckTimer = 0;
+  /** per-frame separation accumulator (mass-weighted push-back) */
+  pushX = 0;
+  pushY = 0;
 
   /** Hero-ish stats (0 for regular units). */
   isHero = false;

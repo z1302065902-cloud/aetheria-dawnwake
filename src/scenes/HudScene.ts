@@ -73,6 +73,7 @@ export class HudScene extends Phaser.Scene {
   private musicLabel!: Phaser.GameObjects.Text;
   private sfxLabel!: Phaser.GameObjects.Text;
   private muteLabel!: Phaser.GameObjects.Text;
+  private relicLabel!: Phaser.GameObjects.Text;
 
   private toastText = '';
   private lastObjectiveSignature = '';
@@ -221,9 +222,10 @@ export class HudScene extends Phaser.Scene {
   private layout(): void {
     this.W = this.scale.width;
     this.H = this.scale.height;
-    this.s = Phaser.Math.Clamp(Math.min(this.W / 1600, this.H / 900), 0.42, 1.6);
+    this.s = Phaser.Math.Clamp(Math.min(this.W / 1600, this.H / 900), 0.3, 1.6);
     const s = this.s;
     const g = this.staticG;
+    this.debugRects = [];
 
     // ---- top strip ----
     const topH = 40 * s;
@@ -257,7 +259,8 @@ export class HudScene extends Phaser.Scene {
     }
     this.objectivePanelHeight = 26 * s + 9 * 19 * s;
 
-    // ---- bottom strip ----
+    // ---- bottom strip - (everything is proportionally capped against the real
+    // viewport so a narrow window shrinks the panels instead of overlapping them) ----
     const bottomH = 132 * s;
     const bottomY = this.H - bottomH;
     g.fillStyle(PAL.uiBg, 0.93);
@@ -265,27 +268,33 @@ export class HudScene extends Phaser.Scene {
     g.lineStyle(1.5, PAL.uiBorder, 0.6);
     g.lineBetween(0, bottomY, this.W, bottomY);
 
+    const gap = 10 * s;
+    const margin = 8 * s;
+    const mmSize = Math.min(120 * s, this.W * 0.13);
+    const hpW = Math.min(296 * s, this.W * 0.26);
+    const abW = Math.min(356 * s, this.W * 0.26);
+
     // minimap
-    const mmSize = 120 * s;
-    const mmX = 8 * s;
+    const mmX = margin;
     const mmY = this.H - mmSize - 6 * s;
     this.minimapImage.setPosition(mmX, mmY).setDisplaySize(mmSize, mmSize);
     this.minimapZone.setPosition(mmX + mmSize / 2, mmY + mmSize / 2).setSize(mmSize, mmSize);
     this.minimapZone.setInteractive();
     g.lineStyle(1.5, PAL.uiBorder, 0.9);
     g.strokeRect(mmX, mmY, mmSize, mmSize);
+    this.rect('minimap', mmX, mmY, mmSize, mmSize);
 
     // hero panel
-    const hpW = 296 * s;
-    const hpX = mmX + mmSize + 10 * s;
+    const hpX = mmX + mmSize + gap;
     const hpY = this.H - bottomH + 8 * s;
     const hpH = bottomH - 16 * s;
     drawPanel(g, hpX, hpY, hpW, hpH, { alpha: 0.9 });
-    this.heroPortrait.setPosition(hpX + 42 * s, hpY + hpH * 0.56).setScale(1.25 * s);
+    const portraitScale = Math.min(1.25 * s, hpW / 240);
+    this.heroPortrait.setPosition(hpX + 42 * s, hpY + hpH * 0.56).setScale(portraitScale);
     this.heroName.setPosition(hpX + 84 * s, hpY + 16 * s).setFontSize(15 * s);
     this.heroLevel.setPosition(hpX + hpW - 10 * s, hpY + 16 * s).setFontSize(13 * s);
     const barX = hpX + 84 * s;
-    const barW = hpW - 96 * s;
+    const barW = Math.max(30 * s, hpW - 96 * s);
     this.heroHp.x = barX;
     this.heroHp.y = hpY + 34 * s;
     this.heroHp.w = barW;
@@ -299,25 +308,34 @@ export class HudScene extends Phaser.Scene {
     this.heroXp.w = barW;
     this.heroXp.h = 5 * s;
     this.heroRespawn.setPosition(hpX + hpW / 2, hpY + hpH - 18 * s).setFontSize(17 * s);
+    this.rect('heroPanel', hpX, hpY, hpW, hpH);
 
     // ability panel (right)
-    const abW = 356 * s;
-    const abX = this.W - abW - 8 * s;
+    const abX = this.W - abW - margin;
     const abY = this.H - bottomH + 8 * s;
     drawPanel(g, abX, abY, abW, hpH, { alpha: 0.9 });
+    const abBtn = Math.min(60 * s, (abW - 40 * s) / 4);
+    const abStep = Math.min(76 * s, (abW - 24 * s) / 4);
     for (let i = 0; i < 4; i++) {
-      const bx = abX + 40 * s + i * 76 * s;
+      const bx = abX + 14 * s + abStep * (i + 0.5);
       const by = abY + 46 * s;
-      this.abilityButtons[i].setPosition(bx, by).setSize(60 * s, 60 * s);
-      this.abilityButtons[i].rect.setSize(60 * s, 60 * s);
-      this.abilityIcons[i].setPosition(bx, by).setDisplaySize(50 * s, 50 * s);
-      this.abilityCosts[i].setPosition(bx, by + 40 * s).setFontSize(11 * s);
+      this.abilityButtons[i].setPosition(bx, by);
+      this.abilityButtons[i].setSize(abBtn, abBtn);
+      this.abilityButtons[i].rect.setSize(abBtn, abBtn);
+      this.abilityIcons[i].setPosition(bx, by).setDisplaySize(abBtn * 0.82, abBtn * 0.82);
+      this.abilityCosts[i].setPosition(bx, by + abBtn * 0.68).setFontSize(11 * s);
+      this.rect(`abilityBtn${i}`, bx - abBtn / 2, by - abBtn / 2, abBtn, abBtn);
     }
+    this.rect('abilityPanel', abX, abY, abW, hpH);
 
-    // command panel (centre)
-    const cmdX = hpX + hpW + 10 * s;
-    const cmdW = Math.max(240 * s, abX - cmdX - 10 * s);
+    // command panel (centre, absorbs whatever space is left)
+    const cmdX = hpX + hpW + gap;
+    const cmdW = Math.max(40 * s, abX - cmdX - gap);
     drawPanel(g, cmdX, abY, cmdW, hpH, { alpha: 0.9 });
+    this.rect('commandPanel', cmdX, abY, cmdW, hpH);
+    this.rect('topStrip', 0, 0, this.W, topH);
+    this.rect('objectives', objX, objY, objW, 26 * s + 9 * 19 * s);
+    this.rect('bottomStrip', 0, bottomY, this.W, bottomH);
     this.selectionTitle.setPosition(cmdX + 10 * s, abY + 14 * s).setFontSize(13 * s);
     const cardW = 56 * s;
     for (let i = 0; i < this.unitCards.length; i++) {
@@ -372,6 +390,7 @@ export class HudScene extends Phaser.Scene {
     this.musicLabel.setPosition(this.W / 2, this.H * 0.42 + 4 * 46 * s + 6 * s).setFontSize(14 * s);
     this.sfxLabel.setPosition(this.W / 2, this.H * 0.42 + 4 * 46 * s + 30 * s).setFontSize(14 * s);
     this.muteLabel.setPosition(this.W / 2, this.H * 0.42 + 4 * 46 * s + 54 * s).setFontSize(14 * s);
+    this.relicLabel.setPosition(this.W / 2, this.H * 0.42 + 4 * 46 * s + 88 * s).setFontSize(13 * s);
     void pauseChildren;
 
     // result
@@ -412,8 +431,9 @@ export class HudScene extends Phaser.Scene {
     this.musicLabel = text(this, 0, 0, '', 14, toCss(PAL.uiText), { origin: [0.5, 0.5] });
     this.sfxLabel = text(this, 0, 0, '', 14, toCss(PAL.uiText), { origin: [0.5, 0.5] });
     this.muteLabel = text(this, 0, 0, '', 14, toCss(PAL.uiText), { origin: [0.5, 0.5] });
+    this.relicLabel = text(this, 0, 0, '', 13, toCss(0x9fffb0), { origin: [0.5, 0.5] });
     this.pauseRoot.add([...this.pauseButtons.map((b) => b.rect), ...this.pauseButtons.map((b) => b.label)]);
-    this.pauseRoot.add([this.musicLabel, this.sfxLabel, this.muteLabel]);
+    this.pauseRoot.add([this.musicLabel, this.sfxLabel, this.muteLabel, this.relicLabel]);
 
     const volumeBtn = (label: string, dy: number, get: () => number, set: (v: number) => void, textObj: () => Phaser.GameObjects.Text) => {
       const minus = new Button(this, 0, 0, 34, 28, '-', () => {
@@ -695,9 +715,24 @@ export class HudScene extends Phaser.Scene {
     this.musicLabel.setText(`音乐音量 ${Math.round(save.current.settings.music * 100)}%`);
     this.sfxLabel.setText(`音效音量 ${Math.round(save.current.settings.sfx * 100)}%`);
     this.muteLabel.setText(`总开关：${save.current.settings.muted ? '已静音' : '开启'}`);
+    const relicLines = this.battle?.getHudState ? this.battle.getHudState().relicLines : [];
+    this.relicLabel.setText(relicLines.length > 0 ? `本局遗物加成：${relicLines.join(' · ')}` : '本局无遗物加成（通关可选目标可获得遗物）');
   }
 
   private xpTable = [0, 120, 300, 560, 900, 1320, 1840, 2480, 3240, 4120];
+
+  // ────────────────────────── layout diagnostics ──────────────────────────
+
+  /** Rectangles actually used by the last layout pass (asserted by tests/layout.mjs). */
+  private debugRects: Array<{ name: string; x: number; y: number; w: number; h: number }> = [];
+
+  private rect(name: string, x: number, y: number, w: number, h: number): void {
+    this.debugRects.push({ name, x, y, w, h });
+  }
+
+  getLayoutDebug(): { viewport: { w: number; h: number; scale: number }; rects: Array<{ name: string; x: number; y: number; w: number; h: number }> } {
+    return { viewport: { w: this.W, h: this.H, scale: this.s }, rects: this.debugRects.slice() };
+  }
 }
 
 /**
