@@ -10,7 +10,7 @@
 #   1. The project page must exist (butler cannot create it) — create it at https://itch.io/game/new
 #      as user zsy2026, Title "Aetheria: Dawnwake · 以太利亚 · 黎明觉醒", slug "aetheria-dawnwake",
 #      Kind = HTML, Classification = Games. Copy for every field is in docs/PUBLISH.md.
-#   2. Upload the cover (/tmp/itch-pkg/cover.jpg, 630x500) and the screenshots (shots/*.png).
+#   2. Upload the cover (release/itch/cover.jpg, 630x500) and the screenshots (release/itch/shots/*.png).
 #   3. Then run this script: it pushes the build and verifies the page.
 set -uo pipefail
 
@@ -18,12 +18,13 @@ BUTLER="$HOME/.local/bin/butler"
 USER="zsy2026"
 SLUG="aetheria-dawnwake"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-PKG="/tmp/itch-pkg"
+PKG="$ROOT/release/itch"   # persistent: /tmp gets cleaned by the OS (see the skill)
 
 echo "== 1/5 build =="
 (cd "$ROOT" && npm run build) || exit 1
 
 echo "== 2/5 package (index.html must sit at the zip root) =="
+mkdir -p "$PKG"
 rm -f "$PKG/$SLUG-html5.zip"
 (cd "$ROOT/dist" && zip -qr "$PKG/$SLUG-html5.zip" . -x "*.map") || exit 1
 unzip -l "$PKG/$SLUG-html5.zip" | head -5

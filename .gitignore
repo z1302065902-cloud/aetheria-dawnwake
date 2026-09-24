@@ -8,3 +8,6 @@ dist-*/
 .vite/
 .vercel
 .env*
+
+# The itch zip is a build artifact: scripts/finish-itch-publish.sh regenerates it from dist/.
+release/itch/*.zip
