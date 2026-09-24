@@ -394,3 +394,21 @@ LetsVPN 后来切到**全局模式**：`route -n get default` → `interface: ut
 本次又试了 2 种选择器（`css=.uploader:has-text(...) .delete_btn` 与 `loc=css:.uploader .delete_btn`）均被 ego 判为
 无效/歧义定位。**影响为零**：`Kind=Downloadable` 后该通道不再产生免费网页试玩。
 手动清理路径：编辑页 → Uploads → 含 `aetheria-dawnwake-html5.zip` 的那一行（DOM 上是 `.uploader`）→ More… → Delete file。
+
+
+---
+
+## 第十一轮：把「试玩 / 完整版」口径同步到**线上商店页与全部 md**
+
+A 套改造（免费试玩 + 付费完整版）之后，**旧文案还在承诺"免费玩完整版"**——这是会误导玩家的真问题，
+本轮全部修正：
+
+| 位置 | 旧 | 新 |
+|---|---|---|
+| `docs/PUBLISH.md` 定价 | 免费（Free）/ 可捐助 | **免费试玩（前两关）+ 完整版付费**（itch $1 · 爱发电 ¥7） |
+| `docs/PUBLISH.md` 创作页简介 | "十关战役…免费"、"游戏本体永久免费" | 免费试玩前两关；完整版在 itch/爱发电发售 |
+| `docs/PUBLISH.md` 发布公告 | 免费游玩（无需下载安装） | 免费试玩（前两关）+ 完整版两条购买链接 |
+| `README.md` 发布行 | GitHub Pages / Vercel / itch.io | 明确写「免费试玩（前两关）」+「完整版 $1 / ¥7」+ 指向 PRICING.md |
+| **线上 itch 商店页描述** | "免费游玩（无需下载安装）"（早前上传的） | **已用 ego 更新并保存**（3735 字符）：新增【免费试玩·前两关】与【完整版·十关】两段，含爱发电链接 |
+
+**线上复核**（匿名浏览器）：`hasDemoSection=true · hasFullSection=true · hasAfdian=true · buyNow=true · runGame=false · $1.00` ✅
