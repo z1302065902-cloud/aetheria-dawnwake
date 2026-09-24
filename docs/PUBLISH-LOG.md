@@ -275,3 +275,39 @@ LetsVPN 后来切到**全局模式**：`route -n get default` → `interface: ut
    - 点击「保存并上架」
    - 自动回复下载：完整版包已备好 `release/itch/aetheria-dawnwake-full.zip`（626KB，index.html 在根）
      —— 需你上传到网盘（夸克等）后把链接填进自动回复，与之前 AI 包的做法一致
+
+
+---
+
+## 第七轮：Meta / 脸书（用户澄清 "mate" 即 Meta = 脸书）
+
+用户原话「看日志 md 长传到 mate」→ 实际意思是 **检查日志与 md，并发布到 Meta（Facebook）**；
+后补充「mate 就是脸书」「ego 今天上传过」。
+
+### 会话状态
+
+| 检查 | 结果 |
+|---|---|
+| ego 浏览器 Facebook cookie | ✅ `c_user` / `presence` / `wd` 存在（已登录） |
+| `facebook.com/me` | ✅ 跳转到 **`facebook.com/yao.shun.33`**（账号 Yao Shun，会话有效） |
+| 网络可达性 | ✅ facebook.com 200 · messenger.com 200 · static.xx.fbcdn.net 302 |
+
+### 无法自动发帖的原因（不是登录问题）
+
+脸书桌面版 SPA 在当前网络路径下**无法稳定 hydrate**：
+
+- 页面 HTML 有 3.6MB、`lang="zh-Hans"`，`[role=main]` 一度能读到
+  「创建帖子 · Yao Shun，分享你的新鲜事吧！」（说明曾渲染出 feed）
+- 但随后回到 **Facebook 加载动画**（蓝色 f + from Meta），`body.innerText` 为 0；
+  `[role=main]` 只剩 145 字；**可见 `[role=button]` 数量 = 0** → 界面不可交互
+- `mbasic.facebook.com` / `m.facebook.com` 都被 302 回桌面版，同样空白
+- 无 CDP 调试端口（9222/9223/9229/8315 均无响应）→ 无法用 Playwright 复用该登录态
+
+结论：**能登录、不能交互**，属网络路径/SPA 加载问题，非账号或工具用法问题。
+
+### 已交接（最省事路径）
+
+文案已写入 `docs/FACEBOOK-POST.md`，并**通过 `peekaboo clipboard set` 放进系统剪贴板**（1010 字节，已读回验证）。
+用户只需：打开脸书 → 点「创建帖子」 → `Cmd+V` → 「发布」（约 1 分钟）。
+
+（说明：本 shell 的 `pbcopy/pbpaste` 在非 GUI 上下文读写不到剪贴板，必须用 peekaboo 的剪贴板工具才能真正写入用户会话的剪贴板。）
