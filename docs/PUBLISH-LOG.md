@@ -105,6 +105,22 @@
 **结论**：GitHub（仓库+Release）、GitHub Pages、Vercel **三者的服务端状态都已确认为正常/Ready**，
 本地对 vercel.app / github 部分 URL 的失败是**本机 DNS 污染与链路抖动**，不是发布失败。
 
+## 第三轮复查：机器处于锁屏状态
+
+用 peekaboo 的权限检查 + 抓屏确认（本轮新增证据）：
+
+| 检查 | 结果 |
+|---|---|
+| `peekaboo_permissions` | Screen Recording: **Granted** · Accessibility: Not Granted（可选） |
+| 命令行 `screencapture` | 全黑（该进程没有屏幕录制权限） |
+| `peekaboo_image`（显示器） | 首次失败 `No displays available for capture`；`caffeinate -u` 唤醒后成功 |
+| 抓到的画面 | **macOS 锁屏页**（"zsy · 使用触控 ID 或输入密码"） |
+| `peekaboo_window` (LetsVPN) | 两个窗口（`快连 VPN` / `变更国家和地区`）均报 `reason=window minimized` —— 锁屏下没有可见 surface |
+
+**结论**：机器锁屏 → 无法做任何 GUI 操作（点 VPN 连接、点浏览器登录），
+所以 itch.io 与爱发电这两件**必须由用户先解锁机器**才能继续。这不是流程问题，也不是我不会做，
+而是物理上点不到。人工解锁属于 human-auth-gate 范围，不代做。
+
 ## 待用户操作（仅两件）
 
 1. **连上 LetsVPN**（进程在跑但隧道没连）→ 说"继续"，我一趟做完 itch（建页 → 封面/截图 → butler 上传 → 设 Public → 验 200）。
