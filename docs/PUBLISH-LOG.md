@@ -452,3 +452,27 @@ dark-zone / horizon-rush 这些付费游戏），但**它们一个都没有 Rele
 | 匿名下载验证 | ✅ 直链 HTTP 200 · 641,202 字节 · 解压根目录含 `index.html` + `og.png` |
 
 **这样公开的是免费试玩包 + 公开源码**（与你的既有约定一致），付费完整版仍只在 itch/爱发电交付。
+
+
+---
+
+## 第十四轮：再查一遍 md（无遗漏）+ 尝试发 itch devlog（未成）
+
+**md 复查结论**：`文档资料/STORMFRONT-多站收费.txt`、`NEO-DRIFT-itch填写.txt` 里的平台清单就是
+itch / 爱发电 / Vercel / Pages —— 与已完成的六项一致；`两个副业项目进度.md` 是 Ko-fi + Pinterest
+（卖 AI 商品，与游戏无关）。**没有遗漏的平台**。
+
+**尝试：itch 开发者日志（devlog）**——这是 itch 页上唯一还空着的内容位，原本能带来站内曝光。
+
+| 尝试 | 方式 | 结果 |
+|---|---|---|
+| 1 | 猜 URL `/game/devlog/5048064`、`/dashboard/devlog` | ✗ 页面不存在 |
+| 2 | 从编辑页找到真实入口 `/dashboard/game/5048064/new-devlog` | ✅ 入口正确 |
+| 3 | 填 `post[title]` + 隐藏域 `textarea[name="post[body]"]` → 点 Save | ✗ 列表仍为空（富文本编辑器的真实状态不在隐藏域） |
+| 4 | 直接点进 `.redactor_editor` 用键盘输入（编辑器内文字 786 字符确认写入）→ 真实点击 Save（视口内） | ✗ 仍为空 |
+
+→ **itch 的 devlog 富文本编辑器状态提交不进去**，4 次后按防死循环规则停手。
+手动补（约 2 分钟）：`https://itch.io/dashboard/game/5048064/devlog` → Write a new post → 粘 `docs/PUBLISH.md`
+的公告文案 → Save。
+
+**未留下任何半成品**（devlog 列表干净，无草稿）。
