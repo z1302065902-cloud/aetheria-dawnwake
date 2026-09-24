@@ -27,7 +27,10 @@ Phaser 3 + TypeScript + Vite，**全部美术与音效均由代码程序化生�
 > ✅ **全游戏中英双语**：426+ 词条 + 数值模板 + 自动换行，UI 任意处默认双语；
 > `tests/bilingual.mjs` **13/13** 强制（静态字面量覆盖 + 12 个运行时状态 + 防重复/防重叠/防溢出）。
 >
-> 📦 **发布**：GitHub Pages / Vercel / itch.io（见 `docs/PUBLISH.md`）。
+> 📦 **发布（试玩 + 完整版）**：
+> · 免费试玩（前两关）：[GitHub Pages](https://z1302065902-cloud.github.io/aetheria-dawnwake/) · [Vercel](https://aetheria-dawnwake.vercel.app)
+> · 完整版十关：itch.io **$1**（付费下载）· 爱发电 **¥7**
+> · 收费模式与构建对应关系见 `docs/PRICING.md`；商店文案见 `docs/PUBLISH.md`。
 >
 > **战斗表现**：16 张单位 spritesheet × 11–15 帧骨骼式动画（idle/walk/attack/death）· 受击方向反馈 + 暴击特效 ·
 > 倒地动画 + 尸体淡出 + Boss 死亡演出（爆炸/终极震动/慢动作）· 陨石全链路特效 · 环境动画（树摇/火炬燃烧冒烟/旗帜/废墟/水面闪光）·
