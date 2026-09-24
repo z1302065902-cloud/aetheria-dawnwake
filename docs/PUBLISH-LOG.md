@@ -157,6 +157,24 @@ curl -x http://127.0.0.1:8899 https://itch.io/     # 200
 所以 itch.io 与爱发电这两件**必须由用户先解锁机器**才能继续。这不是流程问题，也不是我不会做，
 而是物理上点不到。人工解锁属于 human-auth-gate 范围，不代做。
 
+## 便捷工具（防"以后又不能用"）
+
+| 工具 | 用途 |
+|---|---|
+| `scripts/with-tunnel.sh <命令>` | **自动识别隧道网卡 + 起代理 + 让命令走隧道**（CLI 在 LetsVPN 分流模式下默认走 en0，会 000） |
+| `scripts/tunnel-proxy.py` | 上面那个代理本体（`SO_BINDTODEVICE` 到 utun6，无需 sudo） |
+| `scripts/create-itch-page.mjs` | itch 建页自动化（填表 + 封面 + 截图 + Kind=HTML + Public + 保存） |
+| `scripts/finish-itch-publish.sh` | butler 上传 + 验 200（已接入自动建页） |
+| `release/itch/COPY-PASTE.md` | 手动建页抄写单（任何网络/设备可用） |
+
+自测：`./scripts/with-tunnel.sh curl -s -o /dev/null -w "%{http_code}" https://itch.io/` → **200** ✅
+
+## 防锁屏（按你的要求）
+
+- ✅ `caffeinate -d -i -s` 常驻（阻止显示/系统空闲休眠；本轮已启动，pid 见 `pgrep caffeinate`）
+- ✅ `defaults -currentHost write com.apple.screensaver idleTime -int 0`（屏保空闲 = 永不）
+- ⚠️ **未动** `askForPassword`（唤醒需密码是安全项，我不会擅自关；你要真关就说一句，我给命令）
+
 ## 待用户操作（仅两件）
 
 1. **连上 LetsVPN**（进程在跑但隧道没连）→ 说"继续"，我一趟做完 itch（建页 → 封面/截图 → butler 上传 → 设 Public → 验 200）。
