@@ -119,6 +119,14 @@ export interface HudState {
   relicLines: string[];
 }
 
+/** the four reticle ticks, hoisted so the per-frame draw path allocates nothing */
+const RETICLE_TICKS: ReadonlyArray<readonly [number, number]> = [
+  [0, -1],
+  [0, 1],
+  [-1, 0],
+  [1, 0],
+];
+
 /** margin of distant backdrop visible around the playfield */
 const EDGE_MARGIN = 260;
 
@@ -512,7 +520,14 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
       if (this.feed[i].age > 6) this.feed.splice(i, 1);
     }
     this.selection.refresh();
-    this.drawOverlay();
+    // the overlay (rings, reticle, health bars) is redrawn at 20Hz instead of every frame:
+    // Phaser re-triangulates the whole Graphics batch on clear(), and bars do not need 60Hz
+    this.overlayTimer += delta;
+    if (this.overlayTimer >= 50) {
+      this.overlayTimer = 0;
+      this.drawOverlay();
+      this.overlayDrawn++;
+    }
     this.updateGhost();
     this.hudTimer += dt;
     if (this.hudTimer > 0.12) {
@@ -531,6 +546,32 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
   }
 
   // ────────────────────────── overlay (rings + bars) ──────────────────────────
+
+  /** throttled overlay bookkeeping (see update) */
+  private overlayTimer = 0;
+  overlayDrawn = 0;
+
+  /** Health bar drawing, as a method so the hot path does not build a closure each frame. */
+  private drawHealthBar(
+    g: Phaser.GameObjects.Graphics,
+    x: number,
+    y: number,
+    w: number,
+    ratio: number,
+    team: number,
+    building: boolean,
+  ): void {
+    const h = building ? 6 : 4;
+    g.fillStyle(0x000000, 0.62);
+    g.fillRect(x - w / 2 - 1, y - 1, w + 2, h + 2);
+    const color = ratio > 0.55 ? 0x5ada7a : ratio > 0.25 ? 0xf0c04a : 0xe4564a;
+    g.fillStyle(color, 1);
+    g.fillRect(x - w / 2, y, w * ratio, h);
+    if (team !== 1) {
+      g.lineStyle(1, 0xff6a5a, 0.5);
+      g.strokeRect(x - w / 2 - 1, y - 1, w + 2, h + 2);
+    }
+  }
 
   private drawOverlay(): void {
     const g = this.drawGraphics;
@@ -555,30 +596,18 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
       const pulse = 1 + Math.sin(this.now * 6) * 0.08;
       g.lineStyle(2, 0xff6a5a, 0.95);
       g.strokeCircle(target.x, target.y - 8, r * pulse);
-      for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0]] as const) {
+      for (const [dx, dy] of RETICLE_TICKS) {
         g.lineBetween(target.x + dx * r * pulse, target.y - 8 + dy * r * pulse, target.x + dx * (r * pulse + 6), target.y - 8 + dy * (r * pulse + 6));
       }
     }
 
     // health bars for damaged / selected entities
-    const drawBar = (x: number, y: number, w: number, ratio: number, team: number, building: boolean) => {
-      const h = building ? 6 : 4;
-      g.fillStyle(0x000000, 0.62);
-      g.fillRect(x - w / 2 - 1, y - 1, w + 2, h + 2);
-      const color = ratio > 0.55 ? 0x5ada7a : ratio > 0.25 ? 0xf0c04a : 0xe4564a;
-      g.fillStyle(color, 1);
-      g.fillRect(x - w / 2, y, w * ratio, h);
-      if (team !== 1) {
-        g.lineStyle(1, 0xff6a5a, 0.5);
-        g.strokeRect(x - w / 2 - 1, y - 1, w + 2, h + 2);
-      }
-    };
     for (const u of this.world.units) {
       if (u.dead) continue;
       const damaged = u.hpRatio < 0.999;
       const sel = u.selected || this.selection.units.includes(u);
       if (!damaged && !sel && !u.isHero) continue;
-      drawBar(u.x, u.y - metaOf(`u_${u.def.id}`).sy * 0 - u.radius * 2.2 - 10, u.isHero ? 34 : 22, u.hpRatio, u.team, false);
+      this.drawHealthBar(g, u.x, u.y - u.radius * 2.2 - 10, u.isHero ? 34 : 22, u.hpRatio, u.team, false);
       if (u.isHero) {
         const hero = u as Hero;
         g.fillStyle(0x0a0f1c, 0.7);
@@ -591,7 +620,7 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
       if (b.dead) continue;
       const sel = this.selection.building === b;
       if (b.hpRatio > 0.999 && !sel) continue;
-      drawBar(b.x, b.y - b.radius - 22, Math.max(34, b.def.footprint.w * 20), b.hpRatio, b.team, true);
+      this.drawHealthBar(g, b.x, b.y - b.radius - 22, Math.max(34, b.def.footprint.w * 20), b.hpRatio, b.team, true);
       if (b.building) {
         g.fillStyle(0x000000, 0.6);
         g.fillRect(b.x - 22, b.y + 6, 44, 5);

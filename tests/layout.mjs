@@ -22,17 +22,22 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // included as *containment only* checks — mobile is explicitly out of scope, but the
 // HUD must still not spill outside the viewport.
 const PROFILES = [
-  { name: '1920x1080 (desktop)', w: 1920, h: 1080, dpr: 1, strict: true },
-  { name: '1600x900 (reference)', w: 1600, h: 900, dpr: 1, strict: true },
-  { name: '1280x720 (min spec)', w: 1280, h: 720, dpr: 1, strict: true },
-  { name: '1200x1113 (tall/retina)', w: 1200, h: 1113, dpr: 2, strict: true },
-  { name: '844x390 (phone landscape)', w: 844, h: 390, dpr: 2, strict: false },
-  { name: '390x844 (phone portrait)', w: 390, h: 844, dpr: 3, strict: false },
+  // ── four device classes (QA checklist) ──
+  // 1. desktop 2. laptop 3. tablet 4. phone (both orientations)
+  { device: 'desktop', name: '1920x1080 (desktop 1080p)', w: 1920, h: 1080, dpr: 1, strict: true },
+  { device: 'desktop', name: '2560x1440 (desktop 2K)', w: 2560, h: 1440, dpr: 1, strict: true },
+  { device: 'laptop', name: '1600x900 (laptop reference)', w: 1600, h: 900, dpr: 1, strict: true },
+  { device: 'laptop', name: '1280x720 (laptop min spec)', w: 1280, h: 720, dpr: 1, strict: true },
+  { device: 'tablet', name: '1024x768 (tablet landscape)', w: 1024, h: 768, dpr: 2, strict: true },
+  { device: 'tablet', name: '820x1180 (tablet portrait)', w: 820, h: 1180, dpr: 2, strict: true },
+  { device: 'phone', name: '844x390 (phone landscape)', w: 844, h: 390, dpr: 2, strict: false },
+  { device: 'phone', name: '390x844 (phone portrait)', w: 390, h: 844, dpr: 3, strict: false },
 ];
 
 const BOTTOM_PANELS = ['minimap', 'heroPanel', 'commandPanel', 'abilityPanel'];
 
 let failures = 0;
+const EXPECTED_DEVICES = ['desktop', 'laptop', 'tablet', 'phone'];
 function check(name, ok, detail = '') {
   if (!ok) failures++;
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? ` — ${detail}` : ''}`);
@@ -45,6 +50,13 @@ const browser = await chromium.launch({
 });
 
 const rectsOverlap = (a, b) => a.x < b.x + b.w - 0.5 && b.x < a.x + a.w - 0.5 && a.y < b.y + b.h - 0.5 && b.y < a.y + a.h - 0.5;
+
+const coveredDevices = new Set(PROFILES.map((p) => p.device));
+check(
+  `layout: all four device classes are covered (${EXPECTED_DEVICES.join(' / ')})`,
+  EXPECTED_DEVICES.every((d) => coveredDevices.has(d)),
+  `${PROFILES.length} viewports · ${[...coveredDevices].join(', ')}`,
+);
 
 for (const p of PROFILES) {
   const context = await browser.newContext({ viewport: { width: p.w, height: p.h }, deviceScaleFactor: p.dpr });

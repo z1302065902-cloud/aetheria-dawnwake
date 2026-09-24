@@ -265,7 +265,7 @@ export class OrderSystem implements OrderApi {
       return null;
     }
     // fog: the player cannot auto-attack something it cannot see
-    const unit = world.nearestEnemy(u.x, u.y, radius, u.team, (e) => world.canSee(e.x, e.y, u.team));
+    const unit = world.nearestVisibleEnemy(u.x, u.y, radius, u.team);
     if (unit) return unit;
     // No unit in range: engage a hostile BUILDING. Without this an attack-move army cleared
     // the defenders and then stood next to the camp forever, so "push the base" never worked

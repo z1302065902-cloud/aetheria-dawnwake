@@ -21,7 +21,9 @@
     "test:campaign": "node tests/campaign.mjs",
     "test:visual": "node tests/visual.mjs",
     "docs:visual": "node tools/gen-visual-bible.mjs",
-    "test:product": "node tests/product.mjs"
+    "test:product": "node tests/product.mjs",
+    "test:chaos": "node tests/chaos.mjs",
+    "test:profile": "node tests/perf-profile.mjs"
   },
   "dependencies": {
     "phaser": "^3.88.2"

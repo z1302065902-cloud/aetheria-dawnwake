@@ -370,7 +370,7 @@ export class AutomationSystem {
       if (u.dead || u.team !== 1 || u.def.role === 'worker' || u.isHero) continue;
       // already fighting or holding position? leave it alone
       if (u.targetId >= 0 || u.state === 'attack' || u.state === 'gather') continue;
-      let enemy: Unit | null = world.nearestEnemy(u.x, u.y, u.def.aggroRange * 0.85, u.team, (e) => world.canSee(e.x, e.y, u.team));
+      let enemy: Unit | null = world.nearestVisibleEnemy(u.x, u.y, u.def.aggroRange * 0.85, u.team);
       if (!enemy) {
         // nothing to fight? push into the nearest hostile structure
         const b = world.nearestEnemyBuilding(u.x, u.y, u.def.aggroRange * 0.85, u.team);

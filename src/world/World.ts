@@ -283,6 +283,27 @@ export class World {
     return res;
   }
 
+  /**
+   * Same as nearestEnemy but requires the target to be visible to `team`. Exists so hot paths do
+   * not allocate a `(e) => canSee(...)` closure per unit per frame — that was the single largest
+   * source of garbage in the heap profile.
+   */
+  nearestVisibleEnemy(x: number, y: number, radius: number, team: number): Unit | null {
+    let best: Unit | null = null;
+    let bestD = Infinity;
+    this.hashUnits.forEachNear(x, y, radius, (u) => {
+      if (u.dead || u.team === team || u.team === 3) return;
+      if (u.captive) return;
+      if (!this.canSee(u.x, u.y, team)) return;
+      const d = (u.x - x) ** 2 + (u.y - y) ** 2;
+      if (d < bestD) {
+        bestD = d;
+        best = u;
+      }
+    });
+    return best;
+  }
+
   nearestEnemy(x: number, y: number, radius: number, team: number, filter?: (u: Unit) => boolean): Unit | null {
     let best: Unit | null = null;
     let bestD = Infinity;
@@ -382,6 +403,24 @@ export class World {
     target.hp = Math.min(target.maxHp, target.hp + amount);
   }
 
+  /**
+   * Clears every inbound reference to an entity that is about to disappear.
+   *
+   * Without this a unit can keep a `targetId` / `resourceId` / `buildId` pointing at something that
+   * no longer exists — the systems check `entityById` before use so it is not fatal, but it is a
+   * real dangling reference (and exactly the kind of "undefined" state a QA pass should not allow).
+   */
+  private clearReferencesTo(id: number): void {
+    for (const u of this.units) {
+      if (u.targetId === id) {
+        u.targetId = -1;
+        u.forcedTarget = false;
+      }
+      if (u.resourceId === id) u.resourceId = -1;
+      if (u.buildId === id) u.buildId = -1;
+    }
+  }
+
   killUnit(unit: Unit, killerTeam: number): void {
     if (unit.dead) return;
     // defensive: a building has a different death path (site cleanup, objectives, rubble)
@@ -413,6 +452,7 @@ export class World {
     }
     this.fx.deathDust(unit.x, unit.y, unit.radius);
     this.byId.delete(unit.id);
+    this.clearReferencesTo(unit.id);
     const idx = this.units.indexOf(unit);
     if (idx >= 0) this.units.splice(idx, 1);
     this.recomputePop();
@@ -429,6 +469,7 @@ export class World {
     b.sprite?.destroy();
     b.sprite = null;
     this.byId.delete(b.id);
+    this.clearReferencesTo(b.id);
     const idx = this.buildings.indexOf(b);
     if (idx >= 0) this.buildings.splice(idx, 1);
     this.recomputePop();
@@ -515,6 +556,7 @@ export class World {
         r.sprite?.destroy();
         r.sprite = null;
         this.byId.delete(r.id);
+        this.clearReferencesTo(r.id);
         this.resources.splice(i, 1);
       }
     }

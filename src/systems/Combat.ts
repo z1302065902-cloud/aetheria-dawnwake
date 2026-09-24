@@ -82,7 +82,7 @@ export class CombatSystem implements ProjectilePoolApi {
         continue;
       }
       const atk = b.def.attack;
-      const target = world.nearestEnemy(b.x, b.y, atk.range, b.team, (e) => world.canSee(e.x, e.y, b.team));
+      const target = world.nearestVisibleEnemy(b.x, b.y, atk.range, b.team);
       if (!target) continue;
       b.cooldown = atk.cooldown;
       const angle = Math.atan2(target.y - b.y, target.x - b.x);
