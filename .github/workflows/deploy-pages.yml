@@ -30,7 +30,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run build
+      # 试玩版：免费站点只放前两关（完整版走 itch 付费下载 / 爱发电 ¥7）
+      - run: VITE_DEMO=1 npm run build
       - uses: actions/configure-pages@v5
         with:
           enablement: true

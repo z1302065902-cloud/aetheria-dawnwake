@@ -193,7 +193,21 @@ export const MISSIONS: MissionDef[] = [
   },
 ];
 
-export const PLAYABLE_MISSIONS = new Set<string>(['m01', 'm02', 'm03', 'm04', 'm05', 'm06', 'm07', 'm08', 'm09', 'm10']);
+/** 十关全部可通关（完整版） */
+const ALL_MISSION_IDS = ['m01', 'm02', 'm03', 'm04', 'm05', 'm06', 'm07', 'm08', 'm09', 'm10'];
+
+/**
+ * 试玩版只解锁前两关：免费试玩站（GitHub Pages / Vercel）用这份构建引流，
+ * 完整版通过 itch 付费下载与爱发电 ¥7「完整版」方案分发。
+ * 由构建期变量 VITE_DEMO 决定（`VITE_DEMO=1 npm run build`），运行期无法绕过：
+ * 菜单里未解锁的关卡会置灰，且不存在按关卡 id 直达的深链入口。
+ */
+const DEMO_MISSION_IDS = ['m01', 'm02'];
+
+/** 本次构建是否为试玩版 */
+export const IS_DEMO_BUILD = import.meta.env.VITE_DEMO === '1';
+
+export const PLAYABLE_MISSIONS = new Set<string>(IS_DEMO_BUILD ? DEMO_MISSION_IDS : ALL_MISSION_IDS);
 
 export function getMission(id: string): MissionDef {
   const m = MISSIONS.find((x) => x.id === id);

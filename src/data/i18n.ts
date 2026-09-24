@@ -323,6 +323,12 @@ export const EN: Record<string, string> = {
   '为附近氏族单位提供治疗光环，并会施放闪电。': 'Heals nearby clan units and casts lightning.',
   '为英雄铸造铠甲与旗帜…': 'Forging armour and banners for the heroes…',
   '未解锁': 'Locked',
+  // 试玩版（VITE_DEMO=1）：只解锁前两关，其余关卡提示去购买完整版
+  '试玩版': 'Demo',
+  '试玩版不含此关 —— 完整版十关在 itch.io / 爱发电':
+    'Not in the demo — the full ten-mission version is on itch.io / Afdian',
+  '试玩版 · 前两关免费　完整版十关在 itch.io / 爱发电':
+    'Demo · first two missions free　The full ten-mission version is on itch.io / Afdian',
   '未选中任何单位': 'Nothing selected',
   '未知技能': 'Unknown skill',
   '未装备（战利品可在「英雄/装备」里装上）': 'Nothing equipped (loot can be equipped in Heroes / Equipment)',

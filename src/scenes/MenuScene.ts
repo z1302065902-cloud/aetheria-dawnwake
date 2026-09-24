@@ -4,7 +4,7 @@ import { PAL, toCss } from '../art/Palette';
 import { Button, drawPanel, text } from '../ui/UiKit';
 import { audio } from '../audio/AudioBus';
 import { save } from '../core/SaveManager';
-import { MISSIONS, PLAYABLE_MISSIONS } from '../data/missions';
+import { IS_DEMO_BUILD, MISSIONS, PLAYABLE_MISSIONS } from '../data/missions';
 import { HEROES, HERO_ORDER } from '../data/heroes';
 import { ITEMS, RELICS } from '../data/items';
 import { TALENTS, TALENT_BRANCH_LABEL } from '../data/talents';
@@ -217,12 +217,23 @@ export class MenuScene extends Phaser.Scene {
     drawPanel(this.g, panelX, panelY, panelW, panelH, { header: true, alpha: 0.9 });
     const cleared = Object.keys(save.current.campaign.completed).length;
     this.addText(this.W / 2, panelY + 14 * s, `战役 · 三幕十关　已通关 ${cleared}/10`, 16, toCss(PAL.uiGold), [0.5, 0.5], true);
+    // 试玩版标识：玩家必须看得出这份构建只有两关，以及完整版去哪买
+    if (IS_DEMO_BUILD) {
+      this.addText(
+        this.W / 2,
+        panelY + 32 * s,
+        bi('试玩版 · 前两关免费　完整版十关在 itch.io / 爱发电'),
+        11,
+        toCss(PAL.uiDim),
+        [0.5, 0.5],
+      );
+    }
 
     const unlocked = save.current.campaign.unlockedMissions;
     // Rows are taller now: each briefing is bilingual and wraps to two or three lines, and the
     // row label is bilingual as well.
     const rowH = 48 * s;
-    let y = panelY + 40 * s;
+    let y = panelY + (IS_DEMO_BUILD ? 52 : 40) * s;
     for (const act of ACTS) {
       // act header with its own progress, so the campaign reads as a story rather than a list
       const actDone = act.missions.filter((id) => save.current.campaign.completed[id]).length;
@@ -237,15 +248,24 @@ export class MenuScene extends Phaser.Scene {
         if (!m) continue;
         const playable = PLAYABLE_MISSIONS.has(m.id);
         const isUnlocked = unlocked.includes(m.id) && playable;
+        const demoLocked = IS_DEMO_BUILD && !playable; // 试玩版里被裁掉的关卡，而不是“没打过的关”
         const done = save.current.campaign.completed[m.id];
-        const stars = done ? '★'.repeat(done.stars) + '☆'.repeat(3 - done.stars) : isUnlocked ? '可挑战' : '未解锁';
+        const stars = done
+          ? '★'.repeat(done.stars) + '☆'.repeat(3 - done.stars)
+          : isUnlocked
+            ? '可挑战'
+            : demoLocked
+              ? '试玩版'
+              : '未解锁';
         // The row label carries the number, the name in both languages and the state. The biome and
         // time of day were dropped from it: they duplicated the name ("格林谷地 · 绿谷日"), and the
         // deployment screen shows them properly.
         const label = `${String(m.index).padStart(2, '0')}  ${biName(m.name, m.enName)}  [${bi(stars)}]`;
         this.addButton(panelX + panelW * 0.16, y, panelW * 0.42, rowH - 8 * s, label, () => {
           if (!isUnlocked) {
-            this.addToast('先通关上一关');
+            this.addToast(
+              demoLocked ? bi('试玩版不含此关 —— 完整版十关在 itch.io / 爱发电') : '先通关上一关',
+            );
             return;
           }
           this.pendingMission = m.id;
