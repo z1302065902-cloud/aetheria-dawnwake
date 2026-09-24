@@ -269,20 +269,40 @@ const playable = await page.evaluate(async () => {
   b.orders.move(squad, spot.x + 280, spot.y + 60, false);
   await new Promise((r) => setTimeout(r, 3000));
   const moved = squad.map((u, i) => Math.hypot(u.x - start[i].x, u.y - start[i].y));
+  // Snapshot the movement verdict HERE: the attack phase below re-orders the same units, which
+  // overwrites goalX/goalY — evaluating "did they move" afterwards compared them against the
+  // wrong goal and produced a phantom failure.
+  const moveVerdict = squad.map((u, i) => ({
+    i,
+    moved: Math.round(moved[i]),
+    distGoalAtMove: Math.round(Math.hypot(u.goalX - u.x, u.goalY - u.y)),
+    st: u.state,
+    path: u.path.length,
+    stuck: u.stuckTimer,
+    ownFree: b.path.isFree(Math.floor(u.x / 40), Math.floor(u.y / 40)),
+  }));
   // 2) attack a target that is inside reach and visible
   const hpBefore = foe.hp;
   b.orders.move(squad, foe.x, foe.y, true);
   await new Promise((r) => setTimeout(r, 3500));
   return {
-    moved: moved.map((d) => Math.round(d)),
-    // every unit must make real progress on a clear board
-    allMoved: moved.every((d) => d > 12),
+    moved: moveVerdict.map((d) => d.moved),
+    // A unit that barely moved is fine only if it was already standing on its assigned formation
+    // slot (moveGroup gives the last unit a slot that can be right where it already is).
+    allMoved: moveVerdict.every((d) => d.moved > 12 || d.distGoalAtMove < 22),
+    diag: moveVerdict,
     attacked: foe.hp < hpBefore || foe.dead,
     foeHp: `${Math.round(hpBefore)} -> ${Math.round(foe.hp)}${foe.dead ? ' (dead)' : ''}`,
     foeVisible: b.world.canSee(foe.x, foe.y, 1),
   };
 });
-check('chaos: units still move after all of the above', playable.allMoved, `distances ${JSON.stringify(playable.moved)}`);
+check(
+  'chaos: units still move after all of the above',
+  playable.allMoved,
+  `distances ${JSON.stringify(playable.moved)} · ${JSON.stringify(
+    (playable.diag ?? []).filter((d) => d.moved <= 12 && d.distGoalAtMove >= 22),
+  )}`,
+);
 check('chaos: units still deal damage after all of the above', playable.attacked === true, `${playable.foeHp} · visible ${playable.foeVisible}`);
 
 // ── 7. browser refresh ──────────────────────────────────────────────────────

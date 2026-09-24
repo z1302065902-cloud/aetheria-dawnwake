@@ -3,7 +3,8 @@ import { ensureTextures, texturePhases } from '../art/SpriteFactory';
 import { audio } from '../audio/AudioBus';
 import { save } from '../core/SaveManager';
 import { UI, FACTION, REGION, toCss, shade } from '../art/VisualBible';
-import { drawPanel } from '../ui/UiKit';
+import { drawPanel, text as uiText } from '../ui/UiKit';
+import { biAuto } from '../data/i18n';
 import { MISSIONS } from '../data/missions';
 
 /**
@@ -105,13 +106,13 @@ export class LoadingScene extends Phaser.Scene {
     this.add.rectangle(bx, by, bw, 12, UI.bar.back).setOrigin(0, 0.5).setStrokeStyle(1, UI.border, 0.9);
     this.bar = this.add.graphics();
     this.lore = this.add
-      .text(W / 2, by + 26, '正在唤醒战场…', { fontFamily: '"Trebuchet MS", sans-serif', fontSize: '13px', color: toCss(UI.text.primary) })
+      .text(W / 2, by + 26, biAuto('正在唤醒战场…'), { fontFamily: '"Trebuchet MS", sans-serif', fontSize: '13px', color: toCss(UI.text.primary) })
       .setOrigin(0.5, 0);
     this.hint = this.add
       .text(
         W / 2,
         H * 0.84,
-        '那个黄昏，苍穹裂开了。\n你带着残存的骑士团退回绿谷——而荒野深处的氏族正在集结。',
+        biAuto('那个黄昏，苍穹裂开了。\n你带着残存的骑士团退回绿谷——而荒野深处的氏族正在集结。'),
         { fontFamily: '"Trebuchet MS", sans-serif', fontSize: '14px', color: toCss(UI.text.dim), align: 'center', lineSpacing: 8 },
       )
       .setOrigin(0.5, 0);
@@ -156,7 +157,7 @@ export class LoadingScene extends Phaser.Scene {
     // one generation phase per frame: the bar reflects real work, and the UI keeps drawing
     if (this.phase < this.phases.length) {
       const ph = this.phases[this.phase];
-      this.lore.setText(ph.label);
+      this.lore.setText(biAuto(ph.label));
       ph.run(this);
       this.phase++;
       this.done++;
@@ -166,7 +167,7 @@ export class LoadingScene extends Phaser.Scene {
     // remaining groups (fx, decor, terrain helpers) — a single pass, then hand over
     if (!this.finished) {
       this.finished = true;
-      this.lore.setText('点亮火把，集合部队…');
+      this.lore.setText(biAuto('点亮火把，集合部队…'));
       ensureTextures(this);
       this.done = this.total;
       this.drawProgress((W - Math.min(720, W * 0.7)) / 2 + 40, H * 0.3 + 200 - 46, Math.min(720, W * 0.7) - 80, 1);

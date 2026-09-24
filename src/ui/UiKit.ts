@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { PAL, toCss } from '../art/Palette';
+import { biAuto } from '../data/i18n';
 
 const FONT = 'Trebuchet MS, PingFang SC, Microsoft YaHei, sans-serif';
 
@@ -36,9 +37,12 @@ export function text(
   content: string,
   size = 14,
   color: string = toCss(PAL.uiText),
-  opts: { bold?: boolean; origin?: [number, number]; shadow?: boolean } = {},
+  opts: { bold?: boolean; origin?: [number, number]; shadow?: boolean; raw?: boolean } = {},
 ): Phaser.GameObjects.Text {
-  const t = scene.add.text(x, y, content, {
+  // 全游戏中英双语: every label goes through biAuto() here, so a new string anywhere in the UI is
+  // bilingual by default. `raw` opts out (numbers and symbols that must not be touched).
+  const shown = opts.raw ? content : biAuto(content);
+  const t = scene.add.text(x, y, shown, {
     fontFamily: FONT,
     fontSize: `${Math.round(size)}px`,
     color,
@@ -82,6 +86,8 @@ export class Button {
     onClick: () => void,
     style: ButtonStyle = {},
   ) {
+    // button captions are bilingual too, on one line
+    label = biAuto(label);
     this.style = {
       fill: style.fill ?? PAL.uiPanelLight,
       fillHover: style.fillHover ?? 0x35486f,
@@ -112,7 +118,7 @@ export class Button {
 
   setLabel(s: string): this {
     if (!this.label.scene) return this;
-    this.label.setText(s);
+    this.label.setText(biAuto(s));
     return this;
   }
 

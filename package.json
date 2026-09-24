@@ -23,7 +23,8 @@
     "docs:visual": "node tools/gen-visual-bible.mjs",
     "test:product": "node tests/product.mjs",
     "test:chaos": "node tests/chaos.mjs",
-    "test:profile": "node tests/perf-profile.mjs"
+    "test:profile": "node tests/perf-profile.mjs",
+    "test:bilingual": "node tests/bilingual.mjs"
   },
   "dependencies": {
     "phaser": "^3.88.2"

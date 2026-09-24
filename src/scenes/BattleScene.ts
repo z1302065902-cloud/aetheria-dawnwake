@@ -38,6 +38,7 @@ import { AdventureSystem } from '../systems/Adventure';
 import { MapEventsSystem } from '../systems/MapEvents';
 import { LightingSystem } from '../systems/Lighting';
 import { CAMERA, REGION } from '../art/VisualBible';
+import { biAuto } from '../data/i18n';
 import { Rng } from '../core/Rng';
 import { rollLoot } from '../data/items';
 import type { MissionDef } from '../data/types';

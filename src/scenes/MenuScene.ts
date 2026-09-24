@@ -10,6 +10,7 @@ import { ITEMS, RELICS } from '../data/items';
 import { TALENTS, TALENT_BRANCH_LABEL } from '../data/talents';
 import { equipFromInventory, heroSheet, unequipSlot } from '../systems/Equipment';
 import { metaOf } from '../art/SpriteFactory';
+import { bi, biAuto, biName } from '../data/i18n';
 
 type Screen = 'main' | 'campaign' | 'deploy' | 'heroes' | 'settings';
 
@@ -210,9 +211,10 @@ export class MenuScene extends Phaser.Scene {
     for (const act of ACTS) {
       // act header with its own progress, so the campaign reads as a story rather than a list
       const actDone = act.missions.filter((id) => save.current.campaign.completed[id]).length;
+      void actDone;
       const actOpen = act.missions.some((id) => unlocked.includes(id) && PLAYABLE_MISSIONS.has(id));
       this.root.add(this.add.rectangle(panelX + 16 * s, y, panelW - 32 * s, 26 * s, PAL.uiPanelLight, 0.5).setOrigin(0, 0.5));
-      this.addText(panelX + 26 * s, y, `${act.name}　${act.sub}`, 14, actOpen ? toCss(PAL.uiGold) : toCss(PAL.uiDim), [0, 0.5], actOpen);
+      this.addText(panelX + 26 * s, y, `${bi(act.name)}　${bi(act.sub)}`, 14, actOpen ? toCss(PAL.uiGold) : toCss(PAL.uiDim), [0, 0.5], actOpen);
       this.addText(panelX + panelW - 26 * s, y, `${actDone}/${act.missions.length}`, 13, toCss(PAL.uiDim), [1, 0.5]);
       y += rowH;
       for (const mid of act.missions) {
@@ -222,9 +224,10 @@ export class MenuScene extends Phaser.Scene {
         const isUnlocked = unlocked.includes(m.id) && playable;
         const done = save.current.campaign.completed[m.id];
         const stars = done ? '★'.repeat(done.stars) + '☆'.repeat(3 - done.stars) : isUnlocked ? '可挑战' : '未解锁';
+        // compose from bilingual parts: the row mixes a name, a biome, a time of day and a state
         const biome = m.map.biome === 'valley' ? '绿谷' : m.map.biome === 'forest' ? '森林' : '堡垒';
         const tod = m.timeOfDay === 'night' ? '夜' : m.timeOfDay === 'dusk' ? '黄昏' : m.timeOfDay === 'dawn' ? '黎明' : '日';
-        const label = `${String(m.index).padStart(2, '0')}  ${m.name}　· ${biome}${tod}　[${stars}]`;
+        const label = `${String(m.index).padStart(2, '0')}  ${biName(m.name, m.enName)} · ${bi(biome)}${bi(tod, '')} [${bi(stars)}]`;
         this.addButton(panelX + panelW * 0.2, y, panelW * 0.38, rowH - 4 * s, label, () => {
           if (!isUnlocked) {
             this.addToast('先通关上一关');
@@ -499,9 +502,10 @@ export class MenuScene extends Phaser.Scene {
     let iy = panelY + 66 * s;
     const biome = m.map.biome === 'valley' ? '绿谷（明亮草原）' : m.map.biome === 'forest' ? '暗影森林（薄雾、黄昏）' : '黑暗堡垒（灰烬、夜）';
     const todName = m.timeOfDay === 'night' ? '夜' : m.timeOfDay === 'dusk' ? '黄昏' : m.timeOfDay === 'dawn' ? '黎明' : '白天';
+    const biomeLine = `${bi(biome)} · ${bi('光照')}: ${bi(todName)}`;
     const boss = m.boss.unitId ? HERO_BOSS_NAMES[m.boss.unitId] ?? m.boss.unitId : '无';
     const lines = [
-      ['战场', `${biome}　光照：${todName}`],
+      ['战场', biomeLine],
       ['目标时限', `${Math.round(m.parTime / 60)} 分钟（越快星级越高）`],
       ['敌方主营', `${m.enemyCamps.length} 座（强度 ${m.enemyCamps.map((c) => c.strength).join('/')}）`],
       ['最终 Boss', boss],
@@ -519,7 +523,7 @@ export class MenuScene extends Phaser.Scene {
     // objectives preview
     const objText = m.objectives
       .filter((o) => !o.hidden)
-      .map((o) => `${o.optional ? '·' : '▸'} ${o.text}`)
+      .map((o) => biAuto(`${o.optional ? '·' : '▸'} ${o.text}`))
       .join('\n');
     const objs = this.addText(infoX, iy + 76 * s, objText, 12, toCss(PAL.uiDim), [0, 0.5]);
     objs.setWordWrapWidth(panelW * 0.4);

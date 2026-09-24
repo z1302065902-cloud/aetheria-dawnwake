@@ -12,6 +12,7 @@ import { RESOURCE_COLOR, type ResourceId } from '../config/Constants';
 import { save } from '../core/SaveManager';
 import type { BattleScene, HudState } from '../scenes/BattleScene';
 import type { MatchResult } from '../systems/Mission';
+import { biAuto } from '../data/i18n';
 
 interface UnitCard {
   bg: Phaser.GameObjects.Rectangle;
@@ -584,13 +585,13 @@ export class HudScene extends Phaser.Scene {
       const minus = new Button(this, 0, 0, 34, 28, '-', () => {
         set(Math.max(0, get() - 0.1));
         audio.setVolumes(save.current.settings.music, save.current.settings.sfx, save.current.settings.muted);
-        textObj().setText(`${label} ${Math.round(get() * 100)}%（点击 +/- 调整）`);
+        textObj().setText(biAuto(`${label} ${Math.round(get() * 100)}%（点击 +/- 调整）`));
         save.save();
       });
       const plus = new Button(this, 0, 0, 34, 28, '+', () => {
         set(Math.min(1, get() + 0.1));
         audio.setVolumes(save.current.settings.music, save.current.settings.sfx, save.current.settings.muted);
-        textObj().setText(`${label} ${Math.round(get() * 100)}%（点击 +/- 调整）`);
+        textObj().setText(biAuto(`${label} ${Math.round(get() * 100)}%（点击 +/- 调整）`));
         save.save();
       });
       this.volumeButtons.push({ minus, plus, dy });
@@ -602,14 +603,14 @@ export class HudScene extends Phaser.Scene {
     const mute = new Button(this, 0, 0, 34, 28, '静音', () => {
       save.current.settings.muted = !save.current.settings.muted;
       audio.setVolumes(save.current.settings.music, save.current.settings.sfx, save.current.settings.muted);
-      this.muteLabel.setText(`总开关：${save.current.settings.muted ? '已静音' : '开启'}`);
+      this.muteLabel.setText(biAuto(`总开关：${save.current.settings.muted ? '已静音' : '开启'}`));
       save.save();
     });
     this.volumeButtons.push({ minus: mute, plus: null, dy: 2 });
     this.pauseRoot.add([mute.rect, mute.label]);
-    this.musicLabel.setText(`音乐音量 ${Math.round(save.current.settings.music * 100)}%`);
-    this.sfxLabel.setText(`音效音量 ${Math.round(save.current.settings.sfx * 100)}%`);
-    this.muteLabel.setText(`总开关：${save.current.settings.muted ? '已静音' : '开启'}`);
+    this.musicLabel.setText(biAuto(`音乐音量 ${Math.round(save.current.settings.music * 100)}%`));
+    this.sfxLabel.setText(biAuto(`音效音量 ${Math.round(save.current.settings.sfx * 100)}%`));
+    this.muteLabel.setText(biAuto(`总开关：${save.current.settings.muted ? '已静音' : '开启'}`));
   }
 
   private volumeButtons: Array<{ minus: Button; plus: Button | null; dy: number }> = [];
@@ -630,17 +631,17 @@ export class HudScene extends Phaser.Scene {
 
   private showResult(r: MatchResult & { missionName: string; parTime: number }): void {
     this.resultRoot.setVisible(true);
-    this.resultTitle.setText(r.victory ? '胜  利' : '战  败');
+    this.resultTitle.setText(biAuto(r.victory ? '胜  利' : '战  败'));
     this.resultTitle.setColor(r.victory ? toCss(PAL.uiGold) : toCss(0xff6a5a));
-    this.resultSub.setText(`${r.missionName} · 用时 ${formatTime(r.seconds)} / 目标 ${formatTime(r.parTime)}`);
-    this.resultStars.setText(r.victory ? '★'.repeat(r.stars) + '☆'.repeat(3 - r.stars) : '☆☆☆');
+    this.resultSub.setText(biAuto(`${r.missionName} · 用时 ${formatTime(r.seconds)} / 目标 ${formatTime(r.parTime)}`));
+    this.resultStars.setText(biAuto(r.victory ? '★'.repeat(r.stars) + '☆'.repeat(3 - r.stars) : '☆☆☆'));
     const lines = [
       `完成任务：${r.objectivesDone}　可选完成：${r.optionalDone}　失败：${r.objectivesFailed}`,
       `获得金币：${r.goldEarned}　英雄经验：${r.xpEarned}${r.relic ? `　遗物：${r.relic}` : ''}`,
       r.loot && r.loot.length > 0 ? `战利品：${r.loot.join('、')}（可在「英雄 / 装备」里换上）` : '本局没有掉落装备',
       r.victory ? '进度已保存到本地存档。' : '提示：多造农庄提高人口，沿路造塔，让英雄带着部队推进。',
     ];
-    this.resultBody.setText(lines.join('\n'));
+    this.resultBody.setText(biAuto(lines.join('\n')));
     this.layoutOverlays();
   }
 
@@ -651,13 +652,13 @@ export class HudScene extends Phaser.Scene {
       return;
     }
     this.toastText = msg;
-    this.toast.setText(msg).setAlpha(1);
+    this.toast.setText(biAuto(msg)).setAlpha(1);
     this.toastTimer = 2.6;
   }
 
   private showBanner(title: string, sub: string): void {
-    this.bannerTitle.setText(title).setAlpha(1).setScale(0.9);
-    this.bannerSub.setText(sub).setAlpha(1);
+    this.bannerTitle.setText(biAuto(title)).setAlpha(1).setScale(0.9);
+    this.bannerSub.setText(biAuto(sub)).setAlpha(1);
     this.bannerTimer = 2.6;
     this.tweens.add({ targets: this.bannerTitle, scaleX: 1, scaleY: 1, duration: 260, ease: 'Back.easeOut' });
   }
@@ -688,18 +689,18 @@ export class HudScene extends Phaser.Scene {
 
   private refresh(st: HudState): void {
     const s = this.s;
-    this.goldText.setText(`${Math.floor(st.gold)}`);
-    this.woodText.setText(`${Math.floor(st.wood)}`);
-    this.manaText.setText(`${Math.floor(st.mana)}`);
+    this.goldText.setText(biAuto(`${Math.floor(st.gold)}`));
+    this.woodText.setText(biAuto(`${Math.floor(st.wood)}`));
+    this.manaText.setText(biAuto(`${Math.floor(st.mana)}`));
     const popColor = st.popUsed >= st.popMax ? toCss(0xff7a6a) : toCss(PAL.uiText);
-    this.popText.setText(`人口 ${st.popUsed}/${st.popMax}`).setColor(popColor);
-    this.timerText.setText(formatTime(st.elapsed));
-    this.waveText.setText(`下一波进攻：${formatTime(st.wave.nextIn)}　第 ${st.wave.index} 波　FPS ${Math.round(st.fps)}`);
+    this.popText.setText(biAuto(`人口 ${st.popUsed}/${st.popMax}`)).setColor(popColor);
+    this.timerText.setText(biAuto(formatTime(st.elapsed)));
+    this.waveText.setText(biAuto(`下一波进攻：${formatTime(st.wave.nextIn)}　第 ${st.wave.index} 波　FPS ${Math.round(st.fps)}`));
 
     // hero
     const h = st.hero;
-    this.heroName.setText(`${h.name}　Lv.${h.level}`);
-    this.heroLevel.setText(`HP ${Math.ceil(h.hp)}/${h.maxHp}`);
+    this.heroName.setText(biAuto(`${h.name}　Lv.${h.level}`));
+    this.heroLevel.setText(biAuto(`HP ${Math.ceil(h.hp)}/${h.maxHp}`));
     this.heroHp.draw(h.maxHp ? h.hp / h.maxHp : 0);
     this.heroMana.draw(h.maxMana ? h.mana / h.maxMana : 0);
     const xpPrev = this.xpTable[h.level - 1] ?? 0;
@@ -709,7 +710,7 @@ export class HudScene extends Phaser.Scene {
       this.heroPortrait.setTexture(`u_${heroTex.heroDef.id}`);
       this.heroPortrait.setScale(1.25 * s);
     }
-    this.heroRespawn.setText(h.respawn > 1 ? `复活中 ${Math.ceil(h.respawn)}s` : '');
+    this.heroRespawn.setText(biAuto(h.respawn > 1 ? `复活中 ${Math.ceil(h.respawn)}s` : ''));
 
     // abilities
     this.abilityCooldown?.clear();
@@ -733,7 +734,7 @@ export class HudScene extends Phaser.Scene {
       btn.label.setPosition(btn.x - btn.w / 2 + 10 * s, btn.y - btn.h / 2 + 10 * s).setFontSize(12 * s);
       icon.setAlpha(ab.locked ? 0.28 : 1);
       const label = ab.locked ? `${ab.requiredLevel}级解锁` : ab.cooldownLeft > 0 ? `${Math.ceil(ab.cooldownLeft)}s` : `${ab.manaCost} 法力`;
-      this.abilityCosts[i].setText(label);
+      this.abilityCosts[i].setText(biAuto(label));
       this.abilityCosts[i].setColor(ab.locked ? toCss(PAL.uiDim) : ab.manaOk ? toCss(PAL.mana) : toCss(0xff7a6a));
       if (ab.cooldownLeft > 0) {
         const r = ab.cooldownLeft / Math.max(0.001, ab.cooldown);
@@ -751,7 +752,7 @@ export class HudScene extends Phaser.Scene {
     // selection
     const sel = st.selection;
     const units = sel.units;
-    this.selectionTitle.setText(sel.building ? sel.building.name : units.length > 0 ? `已选中 ${units.length} 个单位` : '未选中任何单位');
+    this.selectionTitle.setText(biAuto(sel.building ? sel.building.name : units.length > 0 ? `已选中 ${units.length} 个单位` : '未选中任何单位'));
     for (let i = 0; i < this.unitCards.length; i++) {
       const card = this.unitCards[i];
       const u = units[i];
@@ -760,7 +761,7 @@ export class HudScene extends Phaser.Scene {
       card.label.setVisible(show);
       card.bar.setVisible(show);
       if (show && u) {
-        card.label.setText(u.name);
+        card.label.setText(biAuto(u.name));
         card.bar.draw(u.hp, 0.6);
       }
     }
@@ -805,7 +806,7 @@ export class HudScene extends Phaser.Scene {
       }
       const def = getUnit(item.unitId);
       this.queueTexts[i].setVisible(!b?.building);
-      this.queueTexts[i].setText(`队列 ${i + 1}. ${def.name} ${Math.round(item.progress * 100)}%`);
+      this.queueTexts[i].setText(biAuto(`队列 ${i + 1}. ${def.name} ${Math.round(item.progress * 100)}%`));
     }
 
     // objectives
@@ -816,12 +817,12 @@ export class HudScene extends Phaser.Scene {
         const o = st.objectives[i];
         const t = this.objectiveTexts[i];
         if (!o) {
-          t.setText('');
+          t.setText(biAuto(''));
           continue;
         }
         const mark = o.state === 'done' ? '✔' : o.state === 'failed' ? '✘' : o.state === 'active' ? '▶' : '·';
         const prog = o.total > 1 ? ` (${Math.floor(o.progress)}/${o.total})` : '';
-        t.setText(`${mark} ${o.text}${prog}`);
+        t.setText(biAuto(`${mark} ${o.text}${prog}`));
         t.setColor(o.state === 'done' ? toCss(0x7dff9b) : o.state === 'failed' ? toCss(0xff7a6a) : o.optional ? toCss(0x9fb4dd) : toCss(PAL.uiText));
       }
     }
@@ -867,13 +868,13 @@ export class HudScene extends Phaser.Scene {
     const wk = st.workers;
     const exhausted =
       wk.available.wood === 0 ? '　木材已耗尽' : wk.available.gold === 0 ? '　矿脉已耗尽' : '';
-    this.workerText.setText(
+    this.workerText.setText(biAuto(
       `工人 ${wk.total}　金 ${wk.assigned.gold} 木 ${wk.assigned.wood} 晶 ${wk.assigned.mana}${wk.assigned.idle ? `　闲置 ${wk.assigned.idle}` : ''}${wk.assigned.building ? `　建造 ${wk.assigned.building}` : ''}${exhausted}\n配比 金${wk.mix.gold} 木${wk.mix.wood} 晶${wk.mix.mana}　−/+ 重分配`,
-    );
+    ));
     this.workerText.setLineSpacing(4);
     for (let i = 0; i < this.armyTexts.length; i++) {
       const g = st.armies[i];
-      this.armyTexts[i].setText(g ? `${g.id} ${g.name} ${g.count}` : '');
+      this.armyTexts[i].setText(biAuto(g ? `${g.id} ${g.name} ${g.count}` : ''));
       const stanceBtn = this.armyButtons[i * 2].btn;
       stanceBtn.setLabel(g ? STANCE_LABEL[g.stance as Stance] ?? g.stance : '—');
     }
@@ -882,13 +883,13 @@ export class HudScene extends Phaser.Scene {
       a.btn.setLabel(`${on ? '✔' : '✘'} ${a.label}`);
       a.btn.setSubColor(on ? toCss(0x9fffb0) : toCss(PAL.uiDim));
     }
-    this.adventureText.setText(`冒险：已发现 ${st.adventure.found}　剩余 ${st.adventure.remaining}　${st.adventure.blessing}`);
+    this.adventureText.setText(biAuto(`冒险：已发现 ${st.adventure.found}　剩余 ${st.adventure.remaining}　${st.adventure.blessing}`));
 
     // boss bar
     if (st.boss) {
       this.bossRoot.setVisible(true);
-      this.bossName.setText(st.boss.visible ? st.boss.name : `${st.boss.name}（视野外）`);
-      this.bossPhase.setText(`阶段 ${st.boss.phase} / 3`);
+      this.bossName.setText(biAuto(st.boss.visible ? st.boss.name : `${st.boss.name}（视野外）`));
+      this.bossPhase.setText(biAuto(`阶段 ${st.boss.phase} / 3`));
       this.bossBar.draw(st.boss.maxHp ? st.boss.hp / st.boss.maxHp : 0, 0.5);
     } else {
       this.bossRoot.setVisible(false);
@@ -901,21 +902,21 @@ export class HudScene extends Phaser.Scene {
       const t = this.feedTexts[i];
       if (!t.scene) continue; // stale entry from a previous scene instance
       if (!e) {
-        t.setText('');
+        t.setText(biAuto(''));
         continue;
       }
-      t.setText(e.text);
+      t.setText(biAuto(e.text));
       const base = e.kind === 'loss' ? 0xff8a7a : e.kind === 'boss' ? 0xffd257 : e.kind === 'skill' ? 0x9ff0ff : 0x9fffb0;
       t.setColor(toCss(base));
       t.setAlpha(Math.max(0.15, 1 - e.age / 6));
     }
 
     // volume labels
-    this.musicLabel.setText(`音乐音量 ${Math.round(save.current.settings.music * 100)}%`);
-    this.sfxLabel.setText(`音效音量 ${Math.round(save.current.settings.sfx * 100)}%`);
-    this.muteLabel.setText(`总开关：${save.current.settings.muted ? '已静音' : '开启'}`);
+    this.musicLabel.setText(biAuto(`音乐音量 ${Math.round(save.current.settings.music * 100)}%`));
+    this.sfxLabel.setText(biAuto(`音效音量 ${Math.round(save.current.settings.sfx * 100)}%`));
+    this.muteLabel.setText(biAuto(`总开关：${save.current.settings.muted ? '已静音' : '开启'}`));
     const relicLines = this.battle?.getHudState ? this.battle.getHudState().relicLines : [];
-    this.relicLabel.setText(relicLines.length > 0 ? `本局遗物加成：${relicLines.join(' · ')}` : '本局无遗物加成（通关可选目标可获得遗物）');
+    this.relicLabel.setText(biAuto(relicLines.length > 0 ? `本局遗物加成：${relicLines.join(' · ')}` : '本局无遗物加成（通关可选目标可获得遗物）'));
   }
 
   private xpTable = [0, 120, 300, 560, 900, 1320, 1840, 2480, 3240, 4120];

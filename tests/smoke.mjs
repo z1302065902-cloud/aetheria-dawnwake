@@ -416,7 +416,8 @@ await page.screenshot({ path: `${OUT}03-victory.png` });
 // ── defeat path: restart via the HUD button, then lose the castle ───
 const retryBtn = await page.evaluate(() => {
   const hud = window.__AETHERIA__.scene.getScene('Hud');
-  const label = window.__findText(hud, (t) => t === '再打一次')[0];
+  // labels are bilingual now ("再打一次 · Play again"), so match on the Chinese prefix
+  const label = window.__findText(hud, (t) => t.startsWith('再打一次'))[0];
   return label && label.visible ? { x: label.x, y: label.y } : null;
 });
 check('ui: result panel offers a retry button', !!retryBtn);
@@ -588,9 +589,9 @@ const equipBtn = await page.evaluate(() => {
   };
   rec(menu.children.list);
   // the "装备" button that sits on the same row as the legendary weapon
-  const label = out.find((o) => o.type === 'Text' && o.text === '破潮之矛');
+  const label = out.find((o) => o.type === 'Text' && o.text.startsWith('破潮之矛'));
   if (!label) return null;
-  const btn = out.find((o) => o.type === 'Text' && o.text === '装备' && Math.abs(o.y - label.y) < 4 && o.visible);
+  const btn = out.find((o) => o.type === 'Text' && o.text.startsWith('装备') && Math.abs(o.y - label.y) < 6 && o.visible);
   return btn ? { x: btn.x, y: btn.y, item: label.text } : { row: label.y };
 });
 check('equipment: the inventory row for the legendary weapon is rendered', !!equipBtn && !!equipBtn.x, JSON.stringify(equipBtn));
@@ -900,7 +901,8 @@ check(
 // so restart into a live match first, otherwise the numbers below are meaningless.
 const retryBtn2 = await page.evaluate(() => {
   const hud = window.__AETHERIA__.scene.getScene('Hud');
-  const label = window.__findText(hud, (t) => t === '再打一次')[0];
+  // labels are bilingual now ("再打一次 · Play again"), so match on the Chinese prefix
+  const label = window.__findText(hud, (t) => t.startsWith('再打一次'))[0];
   return label && label.visible ? { x: label.x, y: label.y } : null;
 });
 if (retryBtn2) await page.mouse.click(retryBtn2.x, retryBtn2.y);
