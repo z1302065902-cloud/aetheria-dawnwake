@@ -230,3 +230,48 @@ LetsVPN 后来切到**全局模式**：`route -n get default` → `interface: ut
 - `index.html` 加 `description` / `og:*` / `twitter:card`（分享卡片）
 - `public/og.png` 1200×630（真实战斗截图生成）→ 已上线
 - README 状态修正；`docs/PUBLISH.md`（商店文案）、`docs/PUBLISH-LOG.md`（本文件）、`scripts/finish-itch-publish.sh`
+
+
+---
+
+## 第六轮：按惯例跑「A 全套」（试玩/完整版分离）
+
+依据用户惯例（`文档资料/STORMFRONT-多站收费.txt` + 后台实测：itch `stormfront`=Buy Now、`neo-drift`=$1、
+爱发电售卖商品里已有「DARK ZONE 完整版 ¥7」「HORIZON RUSH 完整版 ¥7」等）。
+
+### ✅ 已完成并有验证
+
+| 项 | 证据 |
+|---|---|
+| 代码：试玩/完整版分离 | `PLAYABLE_MISSIONS` 改为构建期由 `VITE_DEMO` 决定；`main.ts` 暴露 `__AETHERIA__.__build` |
+| 代码：试玩版 UX | 菜单战役面板顶部双语引导；03–10 关标记「试玩版 · Demo」；点击提示去 itch/爱发电 |
+| 代码：i18n | 3 条新字符串入词典（`tests/bilingual.mjs` 覆盖强制） |
+| 质量 | `tsc` 通过 · `bilingual` **BILINGUAL COMPLIANT** · `smoke` **60/60** |
+| 门闸验收 | `tests/release-checks/_verify-build-variants.mjs`：试玩 `{demo:true, playable:[m01,m02]}`、完整 `{demo:false, playable:10}` |
+| **GitHub Pages** | 改为 `VITE_DEMO=1` 构建 → 线上实测 `{"demo":true,"playable":["m01","m02"]}` ✅ |
+| **Vercel** | `vercel.json` 改 `VITE_DEMO=1 npm run build` → 重新部署 → 线上实测同为试玩版 ✅ |
+| **itch 定价** | `Kind → Downloadable`、`payment_mode=paid`、`min_price=$1.00`（对齐 NEO DRIFT）→ 公开页显示 **Buy Now**、**无 Run game** ✅ |
+| **itch 完整版包** | `butler push dist-full ...:full-download --userversion 1.0.0-full` → 通道已建（626KB 完整版）✅ |
+| 文档 | 新增 `docs/PRICING.md`（收费模式与构建对应关系） |
+
+### ⏳ 两项交接（工具层卡住，非账号问题）
+
+1. **itch 删 html5 通道**：`/game/edit/5048064` 的 Uploads 区里 `.delete_btn` 在折叠的「More…」菜单内，
+   点「More…」→「Delete file」→ 原生确认框，**试 3 次未生效**（已按防死循环规则停手）。
+   **影响已被消除**：`Kind=Downloadable` 后页面已无 Run game，那个 html5 zip 现在也是"需付费的文件"。
+   手动清理：编辑页 → Uploads → 该文件的 More… → Delete file（1 分钟）。
+
+2. **爱发电上架 ¥7 商品**：正确入口是 **设置 → 售卖商品 → 上架新商品**（不是「赞助方案」——
+   方案页的新增保存静默失败，且 dashboard 提示「去认证，获得完整功能」+「填写收款方式」未完成）。
+   商品表单我已把描述填入、但**用 5 种机制（坐标点击 / DOM 赋值 / 真实键盘 / `page.fill` / ref 快照）
+   都没能稳定完成**（该 SPA 顶部为吸顶栏、型号区与主表单混排，坐标测量反复失效）。
+   **未产生任何半成品商品**（已核验商品列表：`hasAetheria:false`，原有 5 个完好）。
+   
+   手动上架（2 分钟，字段已备好）：
+   - 入口：`afdian.com/setting/shop` → 「上架新商品」
+   - 商品名称：`完整版 · 以太利亚·黎明觉醒`
+   - 价格：`7.00`（与 DARK ZONE / HORIZON RUSH 一致）
+   - 商品描述：见 `docs/PUBLISH.md`
+   - 点击「保存并上架」
+   - 自动回复下载：完整版包已备好 `release/itch/aetheria-dawnwake-full.zip`（626KB，index.html 在根）
+     —— 需你上传到网盘（夸克等）后把链接填进自动回复，与之前 AI 包的做法一致
