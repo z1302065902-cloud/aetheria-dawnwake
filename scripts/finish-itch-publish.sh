@@ -29,12 +29,17 @@ rm -f "$PKG/$SLUG-html5.zip"
 (cd "$ROOT/dist" && zip -qr "$PKG/$SLUG-html5.zip" . -x "*.map") || exit 1
 unzip -l "$PKG/$SLUG-html5.zip" | head -5
 
-echo "== 3/5 is the project reachable? =="
-"$BUTLER" status "$USER/$SLUG" >/dev/null 2>&1 || {
-  echo "!! butler cannot see $USER/$SLUG — the page does not exist yet, or itch.io is still blocked."
-  echo "   \`butler status\` returning 'invalid game (400)' means the page is missing; the page must be"
-  echo "   created in the browser first (see the header of this script)."
-}
+echo "== 3/5 does the page exist? (butler cannot create one) =="
+if ! "$BUTLER" status "$USER/$SLUG" >/dev/null 2>&1; then
+  echo "page missing -> creating it with ego-browser (needs itch.io to be reachable + a logged-in session)"
+  ~/.local/bin/ego-browser nodejs < "$ROOT/scripts/create-itch-page.mjs" || {
+    echo "!! page creation failed. itch.io is DNS-poisoned on this network — connect the VPN first."
+    exit 1
+  }
+  sleep 5
+fi
+"$BUTLER" status "$USER/$SLUG" >/dev/null 2>&1 || { echo "!! still no page; check the browser session"; exit 1; }
+echo "✓ page exists"
 
 echo "== 4/5 push the build on the html5 channel =="
 "$BUTLER" push "$ROOT/dist" "$USER/$SLUG:html5" --assume-yes --userversion "$(git -C "$ROOT" rev-parse --short HEAD)" || exit 1
