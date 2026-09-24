@@ -226,7 +226,12 @@ const sched = await page.evaluate(() => {
   const b = window.__AETHERIA_BATTLE__;
   return { schedule: b.mapEvents.schedule.map((e) => `${e.kind}@${e.at}`), kinds: Array.from(new Set(b.mapEvents.schedule.map((e) => e.kind))) };
 });
-check('events: the map schedules several events on a timer', sched.schedule.length >= 3, sched.schedule.join(' | '));
+// early missions schedule fewer events on purpose (m01 gets 2, later missions up to 5)
+check(
+  'events: the map schedules events on a timer',
+  sched.schedule.length >= 2 && sched.schedule.every((x) => Number(x.split('@')[1]) >= 240),
+  sched.schedule.join(' | '),
+);
 
 const evt = await page.evaluate(async () => {
   const b = window.__AETHERIA_BATTLE__;

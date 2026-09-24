@@ -1,3 +1,4 @@
+import { TILE } from '../config/Constants';
 import type { Unit } from '../world/Unit';
 import type { ResourceNode } from '../world/ResourceNode';
 import type { GameCtx } from './GameCtx';
@@ -45,7 +46,11 @@ export class EconomySystem {
           break;
         }
         const dist = Math.hypot(node.x - u.x, node.y - u.y);
-        if (dist < node.radius + 26) {
+        // A resource node occupies a BLOCKED tile, so A* snaps the goal to an adjacent free
+        // tile: the path legitimately ends ~1-1.5 tiles (40-60px) from the node centre. The
+        // arrival threshold must allow for that, otherwise the worker stands next to the node
+        // forever and re-paths once a second (this was the "workers never gather" bug).
+        if (dist < node.radius + TILE * 1.6) {
           u.path.length = 0;
           u.setState('gather');
           u.gatherTimer = 0;
@@ -64,7 +69,9 @@ export class EconomySystem {
           break;
         }
         const dist = Math.hypot(node.x - u.x, node.y - u.y);
-        if (dist > node.radius + 40) {
+        // must be comfortably larger than the arrival threshold above, or the worker
+        // oscillates between 'gather' and 'gatherGo' at the boundary
+        if (dist > node.radius + TILE * 2.6) {
           u.setState('gatherGo');
           break;
         }
@@ -96,7 +103,10 @@ export class EconomySystem {
           break;
         }
         const dist = Math.hypot(depot.x - u.x, depot.y - u.y);
-        if (dist < depot.radius + 22) {
+        // Same trap as the resource nodes: a depot occupies blocked tiles, so the path can
+        // only end on a tile NEXT to its footprint (~1.5 tiles / 100-120px from the centre
+        // for a 3x3 castle). A tight threshold made loaded workers stand outside it forever.
+        if (dist < depot.radius + TILE * 1.6) {
           const carry = u.carrying;
           if (carry && carry.amount > 0) {
             // Relic: Harvest — extra resources per trip
@@ -117,7 +127,7 @@ export class EconomySystem {
         }
         if (u.path.length === 0 && now >= u.repathAt) {
           u.repathAt = now + 1.0;
-          const path = this.ctx.path.findPath(Math.floor(u.x / 32), Math.floor(u.y / 32), Math.floor(depot.x / 32), Math.floor(depot.y / 32));
+          const path = this.ctx.path.findPath(Math.floor(u.x / TILE), Math.floor(u.y / TILE), Math.floor(depot.x / TILE), Math.floor(depot.y / TILE));
           if (path) {
             u.path = path;
             u.pathIndex = 0;
@@ -130,10 +140,30 @@ export class EconomySystem {
     }
   }
 
+  /** A node is only worth walking to if it can actually be harvested. */
+  private harvestable(n: ResourceNode): boolean {
+    return !n.dead && !n.depleted && n.gatherRate > 0;
+  }
+
   private assignNewNode(u: Unit): void {
     const { world } = this.ctx;
     const kind = u.carrying?.kind ?? u.lastGatherKind ?? 'gold';
-    const node = world.nearestResource(kind, u.x, u.y) ?? world.nearestResource('gold', u.x, u.y);
+    // skip the mana "nodes": those are the neutral shrines (gatherRate 0, blocked tile), and
+    // sending a worker there parks it forever
+    const pick = (k: 'gold' | 'wood' | 'mana') => {
+      let best: ResourceNode | null = null;
+      let bestD = Infinity;
+      for (const r of world.resources) {
+        if (r.resourceKind !== k || !this.harvestable(r)) continue;
+        const d = (r.x - u.x) ** 2 + (r.y - u.y) ** 2;
+        if (d < bestD) {
+          bestD = d;
+          best = r;
+        }
+      }
+      return best;
+    };
+    const node = pick(kind) ?? pick('gold') ?? pick('wood');
     if (!node) {
       u.setState('idle');
       this.orders.finishOrder(u);
@@ -150,7 +180,7 @@ export class EconomySystem {
       return;
     }
     u.state = 'returnGo';
-    const path = this.ctx.path.findPath(Math.floor(u.x / 32), Math.floor(u.y / 32), Math.floor(depot.x / 32), Math.floor(depot.y / 32));
+    const path = this.ctx.path.findPath(Math.floor(u.x / TILE), Math.floor(u.y / TILE), Math.floor(depot.x / TILE), Math.floor(depot.y / TILE));
     if (path) {
       u.path = path;
       u.pathIndex = 0;

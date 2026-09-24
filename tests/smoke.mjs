@@ -170,6 +170,7 @@ await page.evaluate(() => {
   const b = window.__AETHERIA_BATTLE__;
   b.ai.camps = [];
   b.ai.nextWaveAt = 1e9;
+  // only units: the combat/boss blocks later in this test still need the enemy buildings
   for (const u of [...b.world.units]) if (u.team === 2 || u.team === 3) b.world.killUnit(u, 1);
   for (const u of b.world.units) if (u.team === 1) u.hp = u.maxHp;
 });
@@ -256,9 +257,11 @@ check('production: trained unit exists and population is counted', afterTrain.fo
 const combatSetup = await page.evaluate(() => {
   const b = window.__AETHERIA_BATTLE__;
   const army = b.world.units.filter((u) => u.team === 1 && u.def.role !== 'worker' && !u.isHero);
-  const camp = b.world.buildings.filter((x) => x.team === 2 && x.def.id === 'wb_tent')[0];
+  // any hostile structure will do: the camp composition depends on the mission's objectives
+  const camp = b.world.buildings.filter((x) => x.team === 2)[0];
   const enemiesBefore = b.world.units.filter((u) => u.team === 2).length;
   if (army.length === 0) return { error: 'no army' };
+  if (!camp) return { error: 'no enemy buildings' };
   const hero = b.world.hero;
   b.orders.move([...army, hero].filter(Boolean), camp.x, camp.y, true);
   return { army: army.length, campX: camp.x, campY: camp.y, enemiesBefore };
@@ -794,6 +797,31 @@ const bridge = await page.evaluate(() => {
   b.ai.camps = [];
   b.ai.nextWaveAt = 1e9;
   b.ai.bossSpawned = true; // keep the boss out of this test
+  // isolate formation/pathing: no enemies on the field and automation must not re-task the
+  // squad mid-crossing (this check is about movement, not about auto-attack)
+  b.automation.setSetting('autoAttack', false);
+  b.automation.setSetting('autoRally', false);
+  b.ai.camps = []; // stop camp reinforcement production too, not just the waves
+  b.mapEvents.schedule = []; // a meteor would damage the squad mid-crossing
+  // a void rift triggers when the hero walks over it and spawns shades that then attack the squad
+  b.adventure.spots = [];
+  window.__SPAWNLOG__ = [];
+  const prevSpawn = b.world.spawnEnemyUnit.bind(b.world);
+  b.world.spawnEnemyUnit = (id, x, y, f) => {
+    window.__SPAWNLOG__.push(`${id}@${Math.round(b.world.elapsed)}`);
+    return prevSpawn(id, x, y, f);
+  };
+  // hook THIS world: the global hook was installed on the first battle and dies with it
+  window.__DEATHS__ = [];
+  const prevKilled = b.world.onKilled;
+  b.world.onKilled = (e, kt) => {
+    if (e.kind === 'unit' && e.team === 1) window.__DEATHS__.push(`${e.def.id}<-t${kt}@${Math.round(b.world.elapsed)}`);
+    prevKilled?.(e, kt);
+  };
+  for (const u of [...b.world.units]) if (u.team === 2 || u.team === 3) b.world.killUnit(u, 1);
+  // hostile BUILDINGS shoot too (the camp totem): they were killing 8 squad members mid-crossing
+  for (const bb of [...b.world.buildings]) if (bb.team === 2 || bb.team === 3) b.world.killBuilding(bb, 1);
+  for (const u of b.world.units) if (u.team === 1) u.hp = u.maxHp;
   b.paused = false;
   b.speed = 4;
   b.world.wallet.gold = 9999;
@@ -849,12 +877,17 @@ const formationResult = await page.evaluate(() => {
   // "crossed the river": on the bridge or on its east side (the river runs north-south)
   const onEastSide = squad.filter((u) => u.x > (window.__START_X__ + window.__TARGET_X__) / 2).length;
   const stillPathing = squad.filter((u) => u.path.length > 0).length;
-  return { count: squad.length, worstRatio, worstPair, arrived, onEastSide, stillPathing };
+  return {
+    count: squad.length, worstRatio, worstPair, arrived, onEastSide, stillPathing,
+    deaths: (window.__DEATHS__ || []).slice(-10),
+    squadDead: (window.__SQUAD__ || []).filter((u) => u.dead).length,
+    spawns: (window.__SPAWNLOG__ || []).slice(-8),
+  };
 });
 check(
   'formation: no two units overlap closer than 0.8×(r1+r2) after crossing',
   formationResult.worstRatio >= 0.8,
-  `worst gap ratio ${formationResult.worstRatio.toFixed(2)} (dist/radii ${JSON.stringify(formationResult.worstPair)}) · arrived ${formationResult.arrived}/${formationResult.count} · east ${formationResult.onEastSide}`,
+  `worst gap ratio ${formationResult.worstRatio.toFixed(2)} (dist/radii ${JSON.stringify(formationResult.worstPair)}) · arrived ${formationResult.arrived}/${formationResult.count} · east ${formationResult.onEastSide} · dead ${formationResult.squadDead} · deaths ${JSON.stringify(formationResult.deaths)} · spawns ${JSON.stringify(formationResult.spawns)}`,
 );
 check(
   'formation: the squad actually crossed the bridge',

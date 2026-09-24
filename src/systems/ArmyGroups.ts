@@ -55,7 +55,9 @@ export class ArmyGroupSystem {
       g.members = g.members.filter((m) => !ids.has(m));
     }
     const set = new Set(target.members);
-    for (const u of units) if (!u.dead && !u.isHero) set.add(u.id);
+    // workers belong to the economy: dragging them into a group made the group system
+    // re-task them, which silently cancelled their build/gather jobs
+    for (const u of units) if (!u.dead && !u.isHero && u.def.role !== 'worker') set.add(u.id);
     target.members = Array.from(set);
   }
 
@@ -142,7 +144,7 @@ export class ArmyGroupSystem {
       if (drift <= leash) continue;
       g.lastOrderAt = now;
       // spread the group around the anchor instead of stacking on one pixel
-      const movable = live.filter((u) => u.state !== 'attack' || u.path.length === 0);
+      const movable = live.filter((u) => u.def.role !== 'worker' && (u.state !== 'attack' || u.path.length === 0));
       if (movable.length === 0) continue;
       this.movement.moveGroup(movable, want.x, want.y, (u) => u.setState('move'));
       for (const u of movable) u.targetId = -1;
@@ -152,6 +154,7 @@ export class ArmyGroupSystem {
 
   /** Called when a unit finishes training: join the group whose stance matches its role. */
   assignNewUnit(u: Unit): void {
+    if (u.def.role === 'worker') return; // never auto-rally settlers into the army
     const isRanged = u.def.projectile !== undefined;
     const target = isRanged ? this.group(2) : this.group(1);
     this.assign(target.id, [u]);

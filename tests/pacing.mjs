@@ -115,10 +115,17 @@ for (let step = 0; step < 260; step++) {
     pushed = true;
     await page.evaluate(() => {
       const b = window.__AETHERIA_BATTLE__;
-      const camp = b.world.buildings.find((x) => !x.dead && x.team === 2 && x.def.id === 'wb_camp')
-        ?? b.world.buildings.find((x) => !x.dead && x.team === 2);
+      const camps = b.world.buildings.filter((x) => !x.dead && x.team === 2 && x.def.id === 'wb_camp');
+      const armyUnits = b.world.units.filter((u) => !u.dead && u.team === 1 && u.def.role !== 'worker' && !u.isHero);
+      const centre = armyUnits.length
+        ? { x: armyUnits.reduce((a, u) => a + u.x, 0) / armyUnits.length, y: armyUnits.reduce((a, u) => a + u.y, 0) / armyUnits.length }
+        : { x: 0, y: 0 };
+      // attack the closest camp: a player picks the nearer objective, not the first in a list
+      const camp = camps.sort(
+        (p, q) => Math.hypot(p.x - centre.x, p.y - centre.y) - Math.hypot(q.x - centre.x, q.y - centre.y),
+      )[0] ?? b.world.buildings.find((x) => !x.dead && x.team === 2);
       const army = b.world.units.filter((u) => !u.dead && u.team === 1 && u.def.role !== 'worker' && !u.isHero);
-      if (camp && army.length) b.orders.attackMove(army, camp.x, camp.y);
+      if (camp && army.length) b.orders.move(army, camp.x, camp.y, true);
       window.__PUSHED_AT__ = Math.round(b.world.elapsed);
     });
   }

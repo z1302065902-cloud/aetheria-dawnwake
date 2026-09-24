@@ -155,8 +155,14 @@ for (const id of MISSIONS) {
         const have = b.world.buildings.some((x) => !x.dead && x.team === 1 && x.def.id === wantsBuild.target.buildingId);
         if (!have) {
           const castle = b.world.buildings.find((x) => x.team === 1 && x.def.id === 'castle');
-          const site = b.world.spawnBuilding(wantsBuild.target.buildingId, castle.x + 190, castle.y + 120, 'dawn', false);
-          b.build.startConstruction(site);
+          // use the real placement path and search for a legal spot, otherwise the site can
+          // overlap the castle and no builder can ever reach it
+          outer: for (let r = 160; r <= 520; r += 40) {
+            for (let a = 0; a < 16; a++) {
+              const ang = (a / 16) * Math.PI * 2;
+              if (b.placeBuildingAt(wantsBuild.target.buildingId, castle.x + Math.cos(ang) * r, castle.y + Math.sin(ang) * r).ok) break outer;
+            }
+          }
         }
       }
       // collect: stand on every shrine so it flips to the player

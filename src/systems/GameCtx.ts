@@ -16,9 +16,9 @@ export interface GameCtx {
   /** Seconds since the match started. */
   now: number;
   projectiles: ProjectilePoolApi;
-  onUnitKilled?(unit: Unit, killerTeam: number): void;
-  onBuildingKilled?(b: Building, killerTeam: number): void;
-  onResourceGathered?(kind: 'gold' | 'wood' | 'mana', amount: number): void;
+  // NOTE: dead optional hooks were removed here (onUnitKilled / onBuildingKilled /
+  // onResourceGathered were declared but never called anywhere) — a hook that looks wired but
+  // never fires is worse than no hook. Keep this list to things that are actually invoked.
   onUnitProduced?(unit: Unit): void;
   onResourceDeposited?(kind: 'gold' | 'wood' | 'mana', amount: number): void;
 }

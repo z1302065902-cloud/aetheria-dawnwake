@@ -40,7 +40,7 @@ export const MISSIONS: MissionDef[] = [
     waves: { firstAt: 150, interval: 105, growth: 1.15, max: 9, units: ['raider', 'hunter', 'direwolf'] },
     enemyCamps: [
       { x: 54, y: 20, kind: 'wildborn', strength: 2 },
-      { x: 50, y: 52, kind: 'wildborn', strength: 4 },
+      { x: 50, y: 52, kind: 'wildborn', strength: 3 },
     ],
     boss: { unitId: 'thornmaw', x: 50, y: 52, spawnOn: 'o4' },
     parTime: 20 * 60,

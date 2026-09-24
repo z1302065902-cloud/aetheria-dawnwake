@@ -1,4 +1,4 @@
-import { CFG } from '../config/Constants';
+import { CFG, TILE } from '../config/Constants';
 import type { Unit } from '../world/Unit';
 import type { Building } from '../world/Building';
 import type { ResourceNode } from '../world/ResourceNode';
@@ -65,18 +65,31 @@ export class OrderSystem implements OrderApi {
 
   private prepareGather(u: Unit, node: ResourceNode, kind: 'gold' | 'wood' | 'mana'): void {
     node.gatherers++;
+    // TILE, not a hardcoded 32: with TILE=40 a literal 32 introduced a 25% coordinate error,
+    // so a worker 2 tiles from a node was sent to a path that ended on its own tile and it
+    // stood there forever ("workers never gather anything").
     const path = this.ctx.path.findPath(
-      Math.floor(u.x / 32),
-      Math.floor(u.y / 32),
-      Math.floor(node.x / 32),
-      Math.floor(node.y / 32),
+      Math.floor(u.x / TILE),
+      Math.floor(u.y / TILE),
+      Math.floor(node.x / TILE),
+      Math.floor(node.y / TILE),
     );
     if (path) {
       u.path = path;
       u.pathIndex = 0;
+      // remember where the path actually ends: the goal tile is blocked (the node sits on it)
+      // so the real destination is the snapped free tile next to it
+      const end = path[path.length - 1];
+      u.goalX = end.x;
+      u.goalY = end.y;
+    } else {
+      // never keep a stale path from a previous order — that made units walk somewhere
+      // unrelated while the economy re-pathed every second
+      u.path.length = 0;
+      u.pathIndex = 0;
+      u.goalX = node.x;
+      u.goalY = node.y;
     }
-    u.goalX = node.x;
-    u.goalY = node.y;
     void kind;
   }
 
@@ -88,7 +101,7 @@ export class OrderSystem implements OrderApi {
       u.forcedTarget = false;
       u.resourceId = -1;
       u.setState('buildGo');
-      const path = this.ctx.path.findPath(Math.floor(u.x / 32), Math.floor(u.y / 32), Math.floor(site.x / 32), Math.floor(site.y / 32));
+      const path = this.ctx.path.findPath(Math.floor(u.x / TILE), Math.floor(u.y / TILE), Math.floor(site.x / TILE), Math.floor(site.y / TILE));
       if (path) {
         u.path = path;
         u.pathIndex = 0;
@@ -252,6 +265,15 @@ export class OrderSystem implements OrderApi {
       return null;
     }
     // fog: the player cannot auto-attack something it cannot see
-    return world.nearestEnemy(u.x, u.y, radius, u.team, (e) => world.canSee(e.x, e.y, u.team));
+    const unit = world.nearestEnemy(u.x, u.y, radius, u.team, (e) => world.canSee(e.x, e.y, u.team));
+    if (unit) return unit;
+    // No unit in range: engage a hostile BUILDING. Without this an attack-move army cleared
+    // the defenders and then stood next to the camp forever, so "push the base" never worked
+    // unless the player right-clicked every structure by hand.
+    if (!u.def.attack) return null;
+    const b = world.nearestEnemyBuilding(u.x, u.y, radius, u.team);
+    if (!b) return null;
+    if (!world.canSee(b.x, b.y, u.team)) return null;
+    return b as unknown as Unit;
   }
 }

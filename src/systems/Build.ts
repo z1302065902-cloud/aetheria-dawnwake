@@ -83,6 +83,9 @@ export class BuildSystem {
         }
         continue;
       }
+      // Anything that changes a builder's state (an army group move, a stray order) used to
+      // leave it parked in 'idle' with buildId still set, so it never built again. Re-assert.
+      if (u.state !== 'build' && u.state !== 'buildGo') u.setState('buildGo');
       // The job is over the moment the building is finished — release the worker no matter
       // what state or distance it is in. Missing this left workers parked in 'build' forever
       // (buildId still set), automation skips builders, and the whole economy went dead.
@@ -97,9 +100,11 @@ export class BuildSystem {
         continue;
       }
       const dist = Math.hypot(target.x - u.x, target.y - u.y);
-      // A* routes to the nearest *free* tile outside the footprint, which can be up to
-      // ~1.5 tiles from the footprint centre — the arrival check must allow for that.
-      const reach = target.radius + TILE * 0.9;
+      // A site occupies blocked tiles, so A* can only end on a tile OUTSIDE its footprint:
+      // for a 3x3 building that is ~2 tiles (80-120px) from the centre. The old 0.9-tile
+      // allowance (84px) was just under that, so builders stood 120px away forever and the
+      // site never progressed. Same trap as resource nodes and depots.
+      const reach = target.radius + TILE * 1.8;
       if (u.state === 'buildGo') {
         if (dist < reach) {
           u.path.length = 0;

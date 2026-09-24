@@ -1,5 +1,6 @@
 import { CFG, TILE } from '../config/Constants';
 import { getUnit } from '../data/units';
+import type { ResourceNode } from '../world/ResourceNode';
 import type { Unit } from '../world/Unit';
 import type { GameCtx } from './GameCtx';
 import type { OrderSystem } from './Orders';
@@ -53,13 +54,17 @@ export class AutomationSystem {
     autoRally: true,
   };
 
-  mix: WorkerMix = { gold: 0.55, wood: 0.35, mana: 0.1 };
+  // mana is NOT gathered by workers (it comes from capturing shrines), so its share is 0.
+  // Gold dominates because units are bought with gold.
+  mix: WorkerMix = { gold: 0.7, wood: 0.3, mana: 0 };
 
   /** unit id -> the resource it was last assigned to (for the panel counters) */
   private assignment = new Map<number, ResourceKind>();
   private workerTimer = 0;
   private productionTimer = 0;
   private attackTimer = 0;
+  /** alternates economy and army production while both are below target */
+  private lastWasWorker = false;
   /** unit id -> time until which automation must leave this unit alone (manual orders win) */
   private hold = new Map<number, number>();
   /** automation stops spending while the player is placing a building */
@@ -101,11 +106,11 @@ export class AutomationSystem {
       if (kind && (u.state === 'gather' || u.state === 'gatherGo' || u.state === 'returnGo')) assigned[kind]++;
       else assigned.idle++;
     }
-    const available: WorkerMix = { gold: 0, wood: 0, mana: 0 };
-    for (const r of this.ctx.world.resources) {
-      if (r.dead || r.depleted) continue;
-      available[r.resourceKind]++;
-    }
+    const available: WorkerMix = {
+      gold: this.gatherable('gold').length,
+      wood: this.gatherable('wood').length,
+      mana: this.gatherable('mana').length,
+    };
     return { settings: { ...this.settings }, mix: { ...this.mix }, assigned, total, available };
   }
 
@@ -147,16 +152,40 @@ export class AutomationSystem {
     this.settings[key] = value;
   }
 
+  /**
+   * Only nodes a worker can actually harvest count. Mana "nodes" are the neutral shrines:
+   * gatherRate 0, amount 0, and their tile is blocked. Sending a settler there cost the
+   * worker forever (it could never arrive and could never fill a load) — that was the bug
+   * behind "workers stand in gatherGo and nothing is ever deposited".
+   */
+  private gatherable(kind: ResourceKind): ResourceNode[] {
+    const out: ResourceNode[] = [];
+    for (const r of this.ctx.world.resources) {
+      if (r.dead || r.depleted) continue;
+      if (r.resourceKind !== kind) continue;
+      if (!(r.gatherRate > 0)) continue;
+      out.push(r);
+    }
+    return out;
+  }
+
   /** Sends settlers to the resource that is furthest below its target share. */
   rebalance(limit = 99): void {
     const world = this.ctx.world;
     const workers = world.units.filter((u) => !u.dead && u.team === 1 && u.def.role === 'worker');
     if (workers.length === 0) return;
-    const totalWeight = this.mix.gold + this.mix.wood + this.mix.mana || 1;
+    // a kind with no gatherable node left is folded into the others instead of parking workers
+    const weight: WorkerMix = {
+      gold: this.mix.gold,
+      wood: this.gatherable('wood').length > 0 ? this.mix.wood : 0,
+      mana: this.gatherable('mana').length > 0 ? this.mix.mana : 0,
+    };
+    if (weight.gold + weight.wood + weight.mana <= 0) weight.gold = 1;
+    const totalWeight = weight.gold + weight.wood + weight.mana || 1;
     const target: Record<ResourceKind, number> = {
-      gold: (this.mix.gold / totalWeight) * workers.length,
-      wood: (this.mix.wood / totalWeight) * workers.length,
-      mana: (this.mix.mana / totalWeight) * workers.length,
+      gold: (weight.gold / totalWeight) * workers.length,
+      wood: (weight.wood / totalWeight) * workers.length,
+      mana: (weight.mana / totalWeight) * workers.length,
     };
     // count current assignments
     const current: Record<ResourceKind, number> = { gold: 0, wood: 0, mana: 0 };
@@ -196,8 +225,28 @@ export class AutomationSystem {
 
   private sendTo(u: Unit, kind: ResourceKind): boolean {
     const world = this.ctx.world;
-    let node = world.nearestResource(kind, u.x, u.y);
-    if (!node) node = world.nearestResource('gold', u.x, u.y);
+    // nearest GATHERABLE node of that kind, then fall back to anything harvestable
+    const pool = this.gatherable(kind);
+    let node: ResourceNode | null = null;
+    let bestD = Infinity;
+    for (const r of pool) {
+      const d = (r.x - u.x) ** 2 + (r.y - u.y) ** 2;
+      if (d < bestD) {
+        bestD = d;
+        node = r;
+      }
+    }
+    if (!node) {
+      for (const kind2 of RESOURCES) {
+        for (const r of this.gatherable(kind2)) {
+          const d = (r.x - u.x) ** 2 + (r.y - u.y) ** 2;
+          if (d < bestD) {
+            bestD = d;
+            node = r;
+          }
+        }
+      }
+    }
     if (!node) return false;
     this.orders.gather([u], node, node.resourceKind);
     this.assignment.set(u.id, node.resourceKind);
@@ -239,9 +288,7 @@ export class AutomationSystem {
    */
   private workerTarget(): number {
     let nodes = 0;
-    for (const r of this.ctx.world.resources) {
-      if (!r.dead && !r.depleted) nodes++;
-    }
+    for (const kind of RESOURCES) nodes += this.gatherable(kind).length;
     // two workers per node is right for a human, but as an automatic target it meant the
     // castle spent every coin on settlers for ten minutes and no army ever existed
     return Math.min(10, Math.max(5, Math.round(nodes * 0.7)));
@@ -289,7 +336,10 @@ export class AutomationSystem {
     // always funded instead of the castle eating every coin
     const workerGap = Math.max(0, wantWorkers - workers);
     const combatGap = Math.max(0, this.combatTarget() - combat);
-    const armyFirst = combatGap > workerGap;
+    // Strict alternation while both are below target: preferring the army outright stopped the
+    // castle from ever producing settlers, so the economy stayed at 4 workers and the income
+    // never grew enough to fund the army anyway.
+    const armyFirst = workerGap <= 0 ? true : combatGap <= 0 ? false : this.lastWasWorker;
     for (const b of world.buildings) {
       if (b.dead || b.team !== 1 || b.building) continue;
       const wants = b.def.produces ?? [];
@@ -305,6 +355,7 @@ export class AutomationSystem {
       // 90-gold soldier was never funded and no army ever existed.
       if (this.production.canQueue(b, unitId) !== 'ok') continue;
       if (this.production.enqueue(b, unitId) === 'ok') {
+        this.lastWasWorker = getUnit(unitId).role === 'worker';
         this.onProduced?.(b, unitId);
       }
     }
@@ -319,7 +370,12 @@ export class AutomationSystem {
       if (u.dead || u.team !== 1 || u.def.role === 'worker' || u.isHero) continue;
       // already fighting or holding position? leave it alone
       if (u.targetId >= 0 || u.state === 'attack' || u.state === 'gather') continue;
-      const enemy = world.nearestEnemy(u.x, u.y, u.def.aggroRange * 0.85, u.team, (e) => world.canSee(e.x, e.y, u.team));
+      let enemy: Unit | null = world.nearestEnemy(u.x, u.y, u.def.aggroRange * 0.85, u.team, (e) => world.canSee(e.x, e.y, u.team));
+      if (!enemy) {
+        // nothing to fight? push into the nearest hostile structure
+        const b = world.nearestEnemyBuilding(u.x, u.y, u.def.aggroRange * 0.85, u.team);
+        if (b && world.canSee(b.x, b.y, u.team)) enemy = b as unknown as Unit;
+      }
       if (!enemy) continue;
       // only engage inside the group's leash so units do not chase across the map
       const anchor = anchorOf ? anchorOf(u) : null;

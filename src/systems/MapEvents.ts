@@ -110,10 +110,12 @@ export class MapEventsSystem {
       return;
     }
     if (kind === 'meteor') {
-      // aim at the biggest cluster of the player's units, or the base if the army is home
-      const target = this.playerCluster() ?? this.ctx.world.map.playerStart;
-      this.pending.push({ kind, at: this.ctx.world.elapsed + 4, x: target.x, y: target.y });
-      this.ctx.fx.telegraph(target.x, target.y, 150, 4000, 0xff6a3a);
+      // Aim at the player's ARMY, never at the base: a random event must be a decision the
+      // player can react to, not a coin flip that deletes their whole worker line.
+      const target = this.playerCluster() ?? this.randomSpot(600, 1400) ?? this.ctx.world.map.playerStart;
+      const warnMs = 6000; // long enough to walk out of the circle
+      this.pending.push({ kind, at: this.ctx.world.elapsed + warnMs / 1000, x: target.x, y: target.y });
+      this.ctx.fx.telegraph(target.x, target.y, 150, warnMs, 0xff6a3a);
       return;
     }
     // migration: a herd walks in from the map edge toward the player's base
@@ -127,7 +129,9 @@ export class MapEventsSystem {
           : side === 2
             ? { x: base.x, y: 80 }
             : { x: base.x, y: this.ctx.world.map.h * TILE - 80 };
-    const herd = 4 + this.rng.int(0, 3);
+    // scale the herd with the match clock: at 4 minutes it must be a fight the player can win
+    // with the army they realistically have, not a wipe
+    const herd = Math.min(8, 2 + Math.floor(this.ctx.world.elapsed / 180) + this.rng.int(0, 1));
     for (let i = 0; i < herd; i++) {
       const a = (i / herd) * Math.PI * 2;
       const u = this.ctx.world.spawnUnit(this.rng.chance(0.7) ? 'direwolf' : 'raider', edge.x + Math.cos(a) * 60, edge.y + Math.sin(a) * 60, 'neutral');
@@ -164,8 +168,13 @@ export class MapEventsSystem {
         this.ctx.fx.explosion(x + Math.cos(a) * 90, y + Math.sin(a) * 90, 70, false);
       });
     }
-    // hazard: it does not care whose units are standing there
-    this.combat.areaDamage(x, y, 170, 190, 'magic', 0, -1, 40);
+    // Hazard for combatants only: workers cannot dodge and losing the whole economy to a
+    // random event is not a decision, it is a punishment.
+    for (const u of [...this.ctx.world.units]) {
+      if (u.dead || u.def.role === 'worker' || u.isHero) continue;
+      if (Math.hypot(u.x - x, u.y - y) > 170) continue;
+      this.combat.applyDamage(u, 130, 'magic', 0, -1, false);
+    }
     // reward: crystal deposits
     for (let i = 0; i < 3; i++) {
       const a = (i / 3) * Math.PI * 2 + this.rng.range(0, 1);

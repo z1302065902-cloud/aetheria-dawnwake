@@ -1,4 +1,4 @@
-import { CFG, DEPTH } from '../config/Constants';
+import { CFG, DEPTH, TILE } from '../config/Constants';
 import { Pool } from '../core/Pool';
 import { metaOf, texScale } from '../art/SpriteFactory';
 import { Projectile } from '../world/Projectile';
@@ -359,7 +359,7 @@ export class CombatSystem implements ProjectilePoolApi {
     const ang = Math.atan2(u.y - fromY, u.x - fromX);
     const nx = u.x + Math.cos(ang) * force;
     const ny = u.y + Math.sin(ang) * force;
-    const { tx, ty } = { tx: Math.floor(nx / 32), ty: Math.floor(ny / 32) };
+    const { tx, ty } = { tx: Math.floor(nx / TILE), ty: Math.floor(ny / TILE) };
     if (this.ctx.path.isFree(tx, ty)) {
       u.x = nx;
       u.y = ny;

@@ -304,7 +304,8 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
     this.mapEvents.onFired = (kind, name) => {
       if (kind !== 'meteor') this.pushFeed(`${name} 出现`, 'skill');
     };
-    this.mapEvents.build(3, 150, 130);
+    // early missions get fewer, later events: m01 should teach, not punish
+    this.mapEvents.build(2 + Math.floor(this.mission.index / 3), 240 + this.mission.index * 20, 200);
 
     // ── mission objects: escort caravan / rescue prisoner ──
     const needsEscort = this.mission.objectives.some((o) => o.kind === 'escort');
@@ -362,6 +363,9 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
       this.fx.spawn({ texture: 'fx_smoke', x, y, vy: -14, vx: (Math.random() - 0.5) * 8, life: 1.4, scale0: 0.4, scale1: 1.1, alpha0: 0.28, alpha1: 0, additive: false, tint: 0x9a9488 });
 
     // events: mission -> hud/audio
+    // "gather N gold" objectives count deposits. This hook existed on GameCtx and was called
+    // by the economy, but nobody ever assigned it — so the counter stayed 0 and mission 1 was
+    // impossible to complete in a real game (the campaign test forced the counter and hid it).
     this.world.onKilled = (entity, killerTeam) => {
       this.missions.onKilled(entity, killerTeam);
       if (entity.kind === 'unit') {
@@ -1179,7 +1183,15 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
   /** GameCtx: every unit produced is routed through the automation/army-group pipeline. */
   onUnitProduced(unit: Unit): void {
     if (unit.isHero || unit.team !== 1) return;
+    // "train N combat units" objectives count here. Forgetting this made mission 1 impossible
+    // to finish even after the barracks produced a whole army.
+    this.missions.onProduced(unit);
     this.automation.rallyNewUnit(unit);
+  }
+
+  /** GameCtx: deposits feed "gather N gold" objectives. */
+  onResourceDeposited(kind: 'gold' | 'wood' | 'mana', amount: number): void {
+    this.missions.onDeposit(kind, amount);
   }
 
   /** Per-run random blessing. Map layout and main objectives never change. */

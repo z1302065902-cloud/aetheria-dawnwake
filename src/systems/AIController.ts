@@ -54,8 +54,10 @@ export class AIController {
 
     // initial garrison: a mix of melee / ranged around each camp
     for (const camp of this.camps) {
-      const raiders = camp.strength * 2;
-      const hunters = Math.max(1, Math.round(camp.strength * 1.2));
+      // strength 4 used to mean 8 raiders + 5 hunters + a shaman = 14 defenders per camp, so a
+      // player who could field 8-10 units could never take a camp. Halved on purpose.
+      const raiders = Math.max(2, Math.round(camp.strength * 1.2));
+      const hunters = Math.max(1, Math.round(camp.strength * 0.8));
       for (let i = 0; i < raiders; i++) {
         const ang = (i / raiders) * Math.PI * 2;
         const r = 90 + (i % 3) * 40;
@@ -67,7 +69,7 @@ export class AIController {
         const u = world.spawnEnemyUnit('hunter', camp.x + Math.cos(ang) * 150, camp.y + Math.sin(ang) * 150, camp.kind as any);
         u.aiState = 'defend';
       }
-      if (camp.strength >= 3) {
+      if (camp.strength >= 4) {
         const u = world.spawnEnemyUnit('shaman', camp.x - 70, camp.y - 60, camp.kind as any);
         u.aiState = 'defend';
       }

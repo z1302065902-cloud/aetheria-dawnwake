@@ -1,3 +1,4 @@
+import { TILE } from '../config/Constants';
 import type { Building } from '../world/Building';
 import type { Unit } from '../world/Unit';
 import type { World } from '../world/World';
@@ -68,8 +69,8 @@ export class SelectionSystem {
     }
     const b = this.world.buildings.find((bb) => {
       if (bb.dead || bb.team !== team) return false;
-      const hw = (bb.def.footprint.w * 32) / 2;
-      const hh = (bb.def.footprint.h * 32) / 2;
+      const hw = (bb.def.footprint.w * TILE) / 2;
+      const hh = (bb.def.footprint.h * TILE) / 2;
       return Math.abs(bb.x - x) <= hw && Math.abs(bb.y - y) <= hh + 20;
     });
     if (b) {
