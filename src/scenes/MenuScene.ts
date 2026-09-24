@@ -6,12 +6,29 @@ import { audio } from '../audio/AudioBus';
 import { save } from '../core/SaveManager';
 import { MISSIONS, PLAYABLE_MISSIONS } from '../data/missions';
 import { HEROES, HERO_ORDER } from '../data/heroes';
-import { RELICS } from '../data/items';
+import { ITEMS, RELICS } from '../data/items';
 import { TALENTS, TALENT_BRANCH_LABEL } from '../data/talents';
 import { equipFromInventory, heroSheet, unequipSlot } from '../systems/Equipment';
 import { metaOf } from '../art/SpriteFactory';
 
-type Screen = 'main' | 'campaign' | 'heroes' | 'settings';
+type Screen = 'main' | 'campaign' | 'deploy' | 'heroes' | 'settings';
+
+/** lookup tables for the deployment screen (names shown next to the player's gear) */
+const ITEM_NAMES: Record<string, string> = Object.fromEntries(ITEMS.map((i) => [i.id, i.name]));
+const RELIC_NAMES: Record<string, string> = Object.fromEntries(RELICS.map((r) => [r.id, r.name]));
+const HERO_BOSS_NAMES: Record<string, string> = {
+  thornmaw: '棘齿巨兽（森林巨兽 · 毒绿）',
+  voidsorcerer: '虚空巫师（紫 · 电蓝）',
+  ancientdragon: '远古巨龙（深绯红 · 黑 · 金）',
+};
+void RELIC_NAMES;
+
+/** Campaign acts (product plan phase 2/3): each act is a self-contained story beat. */
+export const ACTS: Array<{ id: string; name: string; sub: string; missions: string[] }> = [
+  { id: 'act1', name: '第一幕 · 绿谷的余火', sub: '重建前哨，学会带兵', missions: ['m01', 'm02', 'm03'] },
+  { id: 'act2', name: '第二幕 · 森林的盟约', sub: '深入暗影森林，营救与被囚者', missions: ['m04', 'm05', 'm06', 'm07'] },
+  { id: 'act3', name: '第三幕 · 虚空潮汐', sub: '黑暗堡垒与远古巨龙', missions: ['m08', 'm09', 'm10'] },
+];
 
 /**
  * Front end: title, campaign select, hero codex / armory / relics and settings.
@@ -82,6 +99,7 @@ export class MenuScene extends Phaser.Scene {
 
     if (this.screen === 'main') this.renderMain();
     else if (this.screen === 'campaign') this.renderCampaign();
+    else if (this.screen === 'deploy') this.renderDeploy();
     else if (this.screen === 'heroes') this.renderHeroes();
     else this.renderSettings();
     void s;
@@ -178,34 +196,51 @@ export class MenuScene extends Phaser.Scene {
 
   private renderCampaign(): void {
     const s = this.s;
-    const panelW = Math.min(this.W * 0.86, 980 * s);
+    const panelW = Math.min(this.W * 0.9, 1040 * s);
     const panelX = (this.W - panelW) / 2;
-    const panelY = this.H * 0.12;
-    const panelH = this.H * 0.74;
+    const panelY = this.H * 0.045;
+    const panelH = this.H * 0.88;
     drawPanel(this.g, panelX, panelY, panelW, panelH, { header: true, alpha: 0.9 });
-    this.addText(this.W / 2, panelY + 14 * s, '战役 · 十关', 18, toCss(PAL.uiGold), [0.5, 0.5], true);
+    const cleared = Object.keys(save.current.campaign.completed).length;
+    this.addText(this.W / 2, panelY + 14 * s, `战役 · 三幕十关　已通关 ${cleared}/10`, 18, toCss(PAL.uiGold), [0.5, 0.5], true);
 
     const unlocked = save.current.campaign.unlockedMissions;
-    const rowH = 38 * s;
-    const startY = panelY + 44 * s;
-    MISSIONS.forEach((m, i) => {
-      const y = startY + i * rowH;
-      const playable = PLAYABLE_MISSIONS.has(m.id);
-      const isUnlocked = unlocked.includes(m.id) && playable;
-      const done = save.current.campaign.completed[m.id];
-      const label = `${String(m.index).padStart(2, '0')}  ${m.name}　${m.enName}`;
-      const state = done ? '★'.repeat(done.stars) + '☆'.repeat(3 - done.stars) : playable ? (isUnlocked ? '可挑战' : '未解锁') : 'Phase 2';
-      const btn = this.addButton(panelX + panelW * 0.28, y, panelW * 0.5, rowH - 6 * s, `${label}　[${state}]`, () => {
-        if (!isUnlocked) {
-          this.addToast('该关卡在后续版本开放');
-          return;
-        }
-        this.startMission(m.id);
-      }, isUnlocked);
-      void btn;
-      const t = this.addText(panelX + panelW * 0.56, y, m.brief, 12, toCss(PAL.uiDim), [0, 0.5]);
-      t.setWordWrapWidth(panelW * 0.36);
-    });
+    const rowH = 34 * s;
+    let y = panelY + 40 * s;
+    for (const act of ACTS) {
+      // act header with its own progress, so the campaign reads as a story rather than a list
+      const actDone = act.missions.filter((id) => save.current.campaign.completed[id]).length;
+      const actOpen = act.missions.some((id) => unlocked.includes(id) && PLAYABLE_MISSIONS.has(id));
+      this.root.add(this.add.rectangle(panelX + 16 * s, y, panelW - 32 * s, 26 * s, PAL.uiPanelLight, 0.5).setOrigin(0, 0.5));
+      this.addText(panelX + 26 * s, y, `${act.name}　${act.sub}`, 14, actOpen ? toCss(PAL.uiGold) : toCss(PAL.uiDim), [0, 0.5], actOpen);
+      this.addText(panelX + panelW - 26 * s, y, `${actDone}/${act.missions.length}`, 13, toCss(PAL.uiDim), [1, 0.5]);
+      y += rowH;
+      for (const mid of act.missions) {
+        const m = MISSIONS.find((x) => x.id === mid);
+        if (!m) continue;
+        const playable = PLAYABLE_MISSIONS.has(m.id);
+        const isUnlocked = unlocked.includes(m.id) && playable;
+        const done = save.current.campaign.completed[m.id];
+        const stars = done ? '★'.repeat(done.stars) + '☆'.repeat(3 - done.stars) : isUnlocked ? '可挑战' : '未解锁';
+        const biome = m.map.biome === 'valley' ? '绿谷' : m.map.biome === 'forest' ? '森林' : '堡垒';
+        const tod = m.timeOfDay === 'night' ? '夜' : m.timeOfDay === 'dusk' ? '黄昏' : m.timeOfDay === 'dawn' ? '黎明' : '日';
+        const label = `${String(m.index).padStart(2, '0')}  ${m.name}　· ${biome}${tod}　[${stars}]`;
+        this.addButton(panelX + panelW * 0.2, y, panelW * 0.38, rowH - 4 * s, label, () => {
+          if (!isUnlocked) {
+            this.addToast('先通关上一关');
+            return;
+          }
+          this.pendingMission = m.id;
+          this.selectedHero = m.hero; // default to the mission's own hero, player may change it
+          this.screen = 'deploy';
+          this.render();
+        }, isUnlocked);
+        const t = this.addText(panelX + panelW * 0.41, y, m.brief, 12, toCss(PAL.uiDim), [0, 0.5]);
+        t.setWordWrapWidth(panelW * 0.56);
+        y += rowH;
+      }
+      y += 6 * s;
+    }
 
     this.addButton(this.W / 2, panelY + panelH + 30 * s, 240 * s, 38 * s, '返回', () => {
       this.screen = 'main';
@@ -440,7 +475,104 @@ export class MenuScene extends Phaser.Scene {
     this.time.delayedCall(1400, () => t.destroy());
   }
 
+  /** which mission the deployment screen is preparing */
+  private pendingMission = 'm01';
+
+  /**
+   * 出征准备 — the core loop of a hero-lord game: pick WHO you bring, look at their gear, read
+   * the mission intel, and only then commit. Previously the hero was hardcoded per mission, which
+   * made the "hero" pillar decorative.
+   */
+  private renderDeploy(): void {
+    const s = this.s;
+    const m = MISSIONS.find((x) => x.id === this.pendingMission) ?? MISSIONS[0];
+    const panelW = Math.min(this.W * 0.9, 1080 * s);
+    const panelX = (this.W - panelW) / 2;
+    const panelY = this.H * 0.06;
+    const panelH = this.H * 0.86;
+    drawPanel(this.g, panelX, panelY, panelW, panelH, { header: true, alpha: 0.94 });
+    this.addText(this.W / 2, panelY + 12 * s, '出 征 准 备', 19, toCss(PAL.uiGold), [0.5, 0.5], true);
+    this.addText(this.W / 2, panelY + 36 * s, `${String(m.index).padStart(2, '0')}　${m.name} · ${m.enName}`, 15, toCss(PAL.uiText), [0.5, 0.5]);
+
+    // ── mission intel (left) ──
+    const infoX = panelX + 26 * s;
+    let iy = panelY + 66 * s;
+    const biome = m.map.biome === 'valley' ? '绿谷（明亮草原）' : m.map.biome === 'forest' ? '暗影森林（薄雾、黄昏）' : '黑暗堡垒（灰烬、夜）';
+    const todName = m.timeOfDay === 'night' ? '夜' : m.timeOfDay === 'dusk' ? '黄昏' : m.timeOfDay === 'dawn' ? '黎明' : '白天';
+    const boss = m.boss.unitId ? HERO_BOSS_NAMES[m.boss.unitId] ?? m.boss.unitId : '无';
+    const lines = [
+      ['战场', `${biome}　光照：${todName}`],
+      ['目标时限', `${Math.round(m.parTime / 60)} 分钟（越快星级越高）`],
+      ['敌方主营', `${m.enemyCamps.length} 座（强度 ${m.enemyCamps.map((c) => c.strength).join('/')}）`],
+      ['最终 Boss', boss],
+      ['本局随机祝福', '进入战场时随机获得 1 个（Roguelite）'],
+    ];
+    for (const [k, v] of lines) {
+      this.addText(infoX, iy, k, 12, toCss(PAL.uiDim), [0, 0.5], true);
+      const t = this.addText(infoX + 96 * s, iy, v, 13, toCss(PAL.uiText), [0, 0.5]);
+      t.setWordWrapWidth(panelW * 0.36);
+      iy += 26 * s;
+    }
+    this.addText(infoX, iy + 8 * s, '任务简报', 12, toCss(PAL.uiDim), [0, 0.5], true);
+    const brief = this.addText(infoX, iy + 30 * s, m.brief, 13, toCss(PAL.uiText), [0, 0.5]);
+    brief.setWordWrapWidth(panelW * 0.4);
+    // objectives preview
+    const objText = m.objectives
+      .filter((o) => !o.hidden)
+      .map((o) => `${o.optional ? '·' : '▸'} ${o.text}`)
+      .join('\n');
+    const objs = this.addText(infoX, iy + 76 * s, objText, 12, toCss(PAL.uiDim), [0, 0.5]);
+    objs.setWordWrapWidth(panelW * 0.4);
+
+    // ── hero picker (right) ──
+    const hx = panelX + panelW * 0.56;
+    this.addText(hx, panelY + 62 * s, '选择出征英雄', 13, toCss(PAL.uiGold), [0, 0.5], true);
+    const level = save.getRecordFor ? save.getRecordFor(this.selectedHero).level : save.current.hero.level;
+    const equipped = save.getRecordFor ? save.getRecordFor(this.selectedHero).equipment : save.current.hero.equipment;
+    HERO_ORDER.forEach((id, i) => {
+      const def = HEROES[id];
+      const y = panelY + 104 * s + i * 128 * s;
+      const selected = this.selectedHero === id;
+      const w = panelW * 0.4;
+      this.g.fillStyle(selected ? PAL.uiPanelLight : PAL.uiPanel, selected ? 0.95 : 0.7);
+      this.g.fillRoundedRect(hx, y - 22 * s, w, 112 * s, 6);
+      this.g.lineStyle(selected ? 2 : 1, selected ? PAL.uiGold : PAL.uiBorder, selected ? 1 : 0.6);
+      this.g.strokeRoundedRect(hx, y - 22 * s, w, 112 * s, 6);
+      const img = this.add.image(hx + 46 * s, y + 30 * s, `u_${id}`).setScale(1.5 * s * metaOf(`u_${id}`).sx);
+      this.root.add(img);
+      this.addText(hx + 92 * s, y - 12 * s, `${def.name} · ${def.title}`, 15, selected ? toCss(PAL.uiGold) : toCss(PAL.uiText), [0, 0.5], true);
+      const role = def.role === 'tank' ? '近战坦克' : def.role === 'mage' ? '远程法术 AOE' : '远程输出';
+      this.addText(hx + 92 * s, y + 8 * s, `${role}　等级 ${level}`, 12, toCss(PAL.uiDim), [0, 0.5]);
+      // equipped gear: the hero-lord fantasy is that your loot shows up here
+      const gear = Object.entries(equipped)
+        .filter(([, itemId]) => !!itemId)
+        .map(([slot, itemId]) => `${slot}: ${ITEM_NAMES[itemId as string] ?? itemId}`)
+        .slice(0, 3);
+      this.addText(hx + 92 * s, y + 26 * s, gear.length ? gear.join('　') : '未装备（战利品可在「英雄/装备」里装上）', 11, toCss(PAL.uiDim), [0, 0.5]);
+      def.skills.forEach((sid, k) => {
+        const icon = this.add.image(hx + 96 * s + k * 34 * s, y + 54 * s, `icon_${sid}`).setDisplaySize(26 * s, 26 * s);
+        this.root.add(icon);
+      });
+      // clickable area
+      const hit = this.addButton(hx + w / 2, y + 44 * s, w, 112 * s, '', () => {
+        this.selectedHero = id;
+        this.render();
+      }, true);
+      hit.rect.setAlpha(0.001);
+      hit.label.setAlpha(0.001);
+    });
+
+    // ── actions ──
+    this.addButton(panelX + panelW * 0.22, panelY + panelH + 26 * s, 200 * s, 40 * s, '返回战役', () => {
+      this.screen = 'campaign';
+      this.render();
+    });
+    this.addButton(panelX + panelW * 0.62, panelY + panelH + 26 * s, 260 * s, 40 * s, `出征 · ${HEROES[this.selectedHero].name}`, () => this.startMission(this.pendingMission));
+  }
+
   private startMission(id: string): void {
+    // commit the hero choice: every hero keeps their own level, gear, talents and relics
+    save.setActiveHero(this.selectedHero);
     this.scene.start('Battle', { missionId: id, heroId: this.selectedHero });
   }
 }

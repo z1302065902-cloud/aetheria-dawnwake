@@ -6,17 +6,14 @@ export interface SaveData {
     unlockedMissions: string[];
     completed: Record<string, { stars: number; bestTime: number; score: number }>;
   };
-  hero: {
-    id: string;
-    level: number;
-    xp: number;
-    talentPoints: number;
-    relics: string[];
-    equipment: Partial<Record<'weapon' | 'armor' | 'ring' | 'amulet', string>>;
-    inventory: string[];
-    /** talent id -> ranks bought */
-    talents: Record<string, number>;
-  };
+  /**
+   * The ACTIVE hero record. It is the same object as `heroes[hero.id]`, so every existing
+   * `save.current.hero.x` read/write keeps working while each hero keeps their own progression —
+   * which is what makes a three-hero roster a real roster instead of three skins for one save.
+   */
+  hero: HeroRecord;
+  /** every hero's own level / equipment / talents / relics, keyed by hero id */
+  heroes?: Record<string, HeroRecord>;
   settings: {
     music: number;
     sfx: number;
@@ -36,6 +33,19 @@ function defaultSave(): SaveData {
     settings: { music: 0.42, sfx: 0.55, muted: false, showHints: true },
     stats: { matches: 0, victories: 0, playtimeMs: 0 },
   };
+}
+
+/** One hero's progression. */
+export interface HeroRecord {
+  id: string;
+  level: number;
+  xp: number;
+  talentPoints: number;
+  relics: string[];
+  equipment: Partial<Record<'weapon' | 'armor' | 'ring' | 'amulet', string>>;
+  inventory: string[];
+  /** talent id -> ranks bought */
+  talents: Record<string, number>;
 }
 
 class SaveManagerImpl {
@@ -67,12 +77,48 @@ class SaveManagerImpl {
           settings: { ...base.settings, ...parsed.settings },
           hero: { ...base.hero, ...parsed.hero, talents: { ...(parsed.hero?.talents ?? {}) }, equipment: { ...(parsed.hero?.equipment ?? {}) } },
         };
+        // per-hero progression: migrate a legacy single-hero save, then re-link `hero` to the
+        // record it belongs to so writes to save.current.hero land on the right hero
+        const heroes = { ...(parsed.heroes ?? {}) };
+        for (const [id, rec] of Object.entries(heroes)) {
+          heroes[id] = { ...base.hero, ...rec, id, talents: { ...(rec?.talents ?? {}) }, equipment: { ...(rec?.equipment ?? {}) } };
+        }
+        heroes[this.data.hero.id] = this.data.hero;
+        this.data.heroes = heroes;
       }
     } catch (err) {
       console.warn('[save] load failed, starting fresh', err);
       this.available = false;
     }
+    if (!this.data.heroes) this.data.heroes = { [this.data.hero.id]: this.data.hero };
     return this.data;
+  }
+
+  /** Switches the hero being played, creating their own progression record the first time. */
+  setActiveHero(id: string): void {
+    if (!this.data.heroes) this.data.heroes = { [this.data.hero.id]: this.data.hero };
+    if (!this.data.heroes[id]) {
+      const base = defaultSave().hero;
+      this.data.heroes[id] = { ...base, id, relics: [], equipment: {}, inventory: [], talents: {} };
+    }
+    this.data.hero = this.data.heroes[id];
+    this.save();
+  }
+
+  /** Alias used by UI code that wants a hero's record without caring about the active one. */
+  getRecordFor(id: string): HeroRecord {
+    return this.heroRecord(id);
+  }
+
+  /** Progression of a hero who is not currently active (for the roster screen). */
+  heroRecord(id: string): HeroRecord {
+    if (this.data.hero.id === id) return this.data.hero;
+    if (!this.data.heroes) this.data.heroes = { [this.data.hero.id]: this.data.hero };
+    if (!this.data.heroes[id]) {
+      const base = defaultSave().hero;
+      this.data.heroes[id] = { ...base, id, relics: [], equipment: {}, inventory: [], talents: {} };
+    }
+    return this.data.heroes[id];
   }
 
   save(): void {

@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { BootScene } from './scenes/BootScene';
 import { LoadingScene } from './scenes/LoadingScene';
+import { save } from './core/SaveManager';
 import { MenuScene } from './scenes/MenuScene';
 import { BattleScene } from './scenes/BattleScene';
 import { HudScene } from './scenes/HudScene';
@@ -33,7 +34,10 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
 
 export function bootGame(): Phaser.Game {
   const game = new Phaser.Game(gameConfig);
+  // test/debug handles: the game, and the save manager (product tests verify per-hero
+  // progression through it rather than by reading localStorage)
   (window as unknown as { __AETHERIA__?: Phaser.Game }).__AETHERIA__ = game;
+  (window as unknown as { __AETHERIA__: Phaser.Game & { __save?: unknown } }).__AETHERIA__.__save = save;
   (window as unknown as { __AETHERIA_AUDIO__?: typeof audio }).__AETHERIA_AUDIO__ = audio;
   return game;
 }

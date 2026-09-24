@@ -20,7 +20,8 @@
     "test:singleplayer": "node tests/singleplayer.mjs",
     "test:campaign": "node tests/campaign.mjs",
     "test:visual": "node tests/visual.mjs",
-    "docs:visual": "node tools/gen-visual-bible.mjs"
+    "docs:visual": "node tools/gen-visual-bible.mjs",
+    "test:product": "node tests/product.mjs"
   },
   "dependencies": {
     "phaser": "^3.88.2"
