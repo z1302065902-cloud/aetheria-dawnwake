@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { BootScene } from './scenes/BootScene';
+import { LoadingScene } from './scenes/LoadingScene';
 import { MenuScene } from './scenes/MenuScene';
 import { BattleScene } from './scenes/BattleScene';
 import { HudScene } from './scenes/HudScene';
@@ -27,7 +28,7 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
   fps: { target: 60, min: 30 },
   input: { mouse: { preventDefaultWheel: true } },
   disableContextMenu: true,
-  scene: [BootScene, MenuScene, BattleScene, HudScene],
+  scene: [BootScene, LoadingScene, MenuScene, BattleScene, HudScene],
 };
 
 export function bootGame(): Phaser.Game {

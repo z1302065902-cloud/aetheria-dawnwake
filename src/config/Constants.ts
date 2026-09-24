@@ -43,6 +43,8 @@ export const CFG = {
 };
 
 export const DEPTH = {
+  /** distant hills, drawn below the terrain so they only show outside the playfield */
+  BACKDROP: -20,
   TERRAIN: 0,
   DECAL: 10,
   CORPSE: 20,

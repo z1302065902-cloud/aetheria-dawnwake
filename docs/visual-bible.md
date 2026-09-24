@@ -201,8 +201,8 @@
 | m09 | night | |
 | m10 | night | 虚空潮汐 |
 
-## 附：全部允许色（100 个）
+## 附：全部允许色（128 个）
 
 ```
-#121420  #4b6cc1  #2c3f7d  #b9c4d8  #f0ead6  #ffd257  #8a5f3a  #4f3520  #7a6a52  #c9a86a  #ff8a3a  #6f4fbf  #241a3d  #5a4a8a  #2b2145  #7fd8ff  #6b6152  #3d362c  #8a8272  #9a8f78  #d9c9a0  #4a7a3e  #559042  #8f8f96  #fff0c8  #0a1020  #3a6338  #487a44  #6f7a72  #c8e0ff  #081018  #9fe07a  #5a5f66  #6d6f74  #8a8a92  #d8c0ff  #0c0a18  #4a4048  #5a4c54  #7a6a72  #ffb0a0  #1a0a12  #ff5a3a  #ff7a3a  #ff9a4a  #3a2018  #ffb060  #d8f4ff  #9fe8ff  #243a4a  #9f7fff  #e0d0ff  #b090ff  #2a1a44  #c8a4ff  #fff0a0  #fff8e2  #ffe2a0  #4a4020  #8a5fd0  #1a1030  #9fd8ff  #b9a884  #2a2018  #7fc86a  #c8f0a0  #1a3018  #e8e0b0  #8a8478  #3a2a18  #d8ff9a  #4a5a44  #243018  #7fa05a  #9a94a8  #6a6470  #1a1424  #ff9a6a  #5a4a48  #2a1210  #d9a08a  #4ade80  #c084fc  #fff0d0  #1a2438  #1a2440  #101728  #27355c  #4a5d8f  #e6ecff  #8fa2c9  #ef4444  #35507f  #1c2130  #7fa0e0  #5f6b85  #60d67a  #ef5350  #4aa8ff  #0d1220
+#121420  #4b6cc1  #2c3f7d  #b9c4d8  #f0ead6  #ffd257  #1b2547  #dce8ff  #8a5f3a  #4f3520  #7a6a52  #c9a86a  #ff8a3a  #2a1a0e  #e8c79a  #6f4fbf  #241a3d  #5a4a8a  #2b2145  #7fd8ff  #120c22  #ded4ff  #6b6152  #3d362c  #8a8272  #9a8f78  #d9c9a0  #241f18  #d6cbb4  #8f1f24  #1a0d10  #ff5a3a  #ff6a4a  #1a0808  #140e24  #c8b8ff  #8f6fff  #0c0818  #4a6b32  #1c2414  #9fe07a  #a8d070  #0e1408  #3dffa0  #ff4a3a  #b585ff  #fff0c8  #dfe8e0  #b8b2ac  #a8c8e0  #e8f0ff  #c8a4ff  #b9a884  #8a8a92  #559042  #9f7fff  #b03a3a  #4a7a3e  #8f8f96  #0a1020  #3a6338  #487a44  #6f7a72  #c8e0ff  #081018  #5a5f66  #6d6f74  #d8c0ff  #0c0a18  #4a4048  #5a4c54  #7a6a72  #ffb0a0  #1a0a12  #ff7a3a  #ff9a4a  #3a2018  #ffb060  #d8f4ff  #9fe8ff  #243a4a  #e0d0ff  #b090ff  #2a1a44  #fff0a0  #fff8e2  #ffe2a0  #4a4020  #8a5fd0  #1a1030  #9fd8ff  #2a2018  #7fc86a  #c8f0a0  #1a3018  #e8e0b0  #8a8478  #3a2a18  #d8ff9a  #4a5a44  #243018  #7fa05a  #9a94a8  #6a6470  #1a1424  #ff9a6a  #5a4a48  #2a1210  #d9a08a  #4ade80  #c084fc  #fff0d0  #1a2438  #1a2440  #101728  #27355c  #4a5d8f  #e6ecff  #8fa2c9  #ef4444  #35507f  #1c2130  #7fa0e0  #5f6b85  #60d67a  #ef5350  #4aa8ff  #0d1220
 ```

@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { PAL, shade } from './Palette';
+import { Rng } from '../core/Rng';
 import { layoutFor, posesFor, renderUnitStrip, type UnitSheetLayout } from './UnitRenderer';
 import { UNITS } from '../data/units';
 import { BUILDINGS } from '../data/buildings';
@@ -969,6 +970,70 @@ function drawTree(scene: Phaser.Scene, key: string, variant: number): void {
   setMeta(key, 1 / SS, (size - 5) / size);
 }
 
+/**
+ * Distant backdrop band (Visual Bible §2e): layered hill silhouettes for one horizon band.
+ * Drawn hazy — blended toward the region fog — so it reads as "far away" instead of as more
+ * map. Three of these stack into the background layer.
+ */
+export function drawBackdropTexture(scene: Phaser.Scene, key: string, ground: number, haze: number, seed: number, band: number): void {
+  const W = 1024;
+  const H = 260;
+  const c = ctx2d(scene, key, W, H);
+  const rng = new Rng(seed);
+  // silhouette colour: the ground colour pushed toward the fog (atmospheric perspective)
+  const sil = blend(ground, haze, 0.55 + band * 0.12);
+  const silDark = blend(shade(ground, -0.12), haze, 0.5 + band * 0.12);
+  c.clearRect(0, 0, W, H);
+  // two overlapping ridges so the skyline is not a single wavy line
+  for (const [col, base, amp, step] of [
+    [silDark, H * 0.7, 46, 128],
+    [sil, H * 0.82, 30, 96],
+  ] as const) {
+    c.beginPath();
+    c.moveTo(0, H);
+    let y = base;
+    for (let x = 0; x <= W; x += step) {
+      const ny = base - Math.sin((x / W) * Math.PI * (2 + band)) * amp - rng.range(0, amp * 0.4);
+      c.lineTo(x, Math.max(H * 0.35, ny));
+      y = ny;
+    }
+    void y;
+    c.lineTo(W, H);
+    c.closePath();
+    c.fillStyle = css(col);
+    c.fill();
+  }
+  // a couple of tower silhouettes on the nearest ridge for a fantasy read
+  const towers = 2 + band;
+  for (let i = 0; i < towers; i++) {
+    const tx = rng.range(60, W - 60);
+    const th = rng.range(34, 64);
+    const tw = rng.range(10, 18);
+    c.fillStyle = css(sil);
+    c.fillRect(tx, H * 0.82 - th, tw, th);
+    c.beginPath();
+    c.moveTo(tx - 3, H * 0.82 - th);
+    c.lineTo(tx + tw / 2, H * 0.82 - th - 14);
+    c.lineTo(tx + tw + 3, H * 0.82 - th);
+    c.closePath();
+    c.fill();
+  }
+  // horizon glow: a warm lift along the ridge line so the band has a light source
+  const g = c.createLinearGradient(0, H * 0.55, 0, H);
+  g.addColorStop(0, css(0xfff0c8, 0.16));
+  g.addColorStop(1, css(0xffffff, 0));
+  c.fillStyle = g;
+  c.fillRect(0, H * 0.55, W, H * 0.45);
+  finish(scene, key, c);
+  setMeta(key, 1, 1);
+}
+
+/** Mixes a colour toward another by t (used for atmospheric haze). */
+function blend(a: number, b: number, t: number): number {
+  const f = (x: number, y: number) => Math.round(x + (y - x) * t);
+  return (f((a >> 16) & 0xff, (b >> 16) & 0xff) << 16) | (f((a >> 8) & 0xff, (b >> 8) & 0xff) << 8) | f(a & 0xff, b & 0xff);
+}
+
 /** Treasure chest: banded wood with a gold lock and a glow. */
 function drawChest(scene: Phaser.Scene, key: string): void {
   const size = 40;
@@ -1432,20 +1497,22 @@ function drawResource(scene: Phaser.Scene, key: string, kind: 'gold' | 'mana'): 
 
 let generated = false;
 
+/**
+ * Texture generation, split into labelled phases. The loading screen walks these one per frame
+ * so the progress bar shows REAL progress instead of a fake timer.
+ */
+export function texturePhases(): Array<{ label: string; run: (scene: Phaser.Scene) => void }> {
+  return [
+    { label: '唤醒远古战场的记忆…', run: (scene) => { for (const id of Object.keys(UNITS)) drawUnitSheet(scene, `u_${id}`, UNITS[id].art); } },
+    { label: '为英雄铸造铠甲与旗帜…', run: (scene) => { for (const id of Object.keys(HEROES)) drawUnitSheet(scene, `u_${id}`, HEROES[id].art); } },
+    { label: '绘制王国的城堡与营地…', run: (scene) => { for (const id of Object.keys(BUILDINGS)) { const b = BUILDINGS[id]; drawBuildingTexture(scene, `b_${id}`, b.art, b.footprint); } } },
+  ];
+}
+
 export function ensureTextures(scene: Phaser.Scene): void {
   if (generated) return;
   generated = true;
-
-  for (const id of Object.keys(UNITS)) {
-    drawUnitSheet(scene, `u_${id}`, UNITS[id].art);
-  }
-  for (const id of Object.keys(HEROES)) {
-    drawUnitSheet(scene, `u_${id}`, HEROES[id].art);
-  }
-  for (const id of Object.keys(BUILDINGS)) {
-    const b = BUILDINGS[id];
-    drawBuildingTexture(scene, `b_${id}`, b.art, b.footprint);
-  }
+  for (const ph of texturePhases()) ph.run(scene);
   for (const k of ['arrow', 'bolt', 'fireball', 'boulder']) drawProjectile(scene, `p_${k}`, k);
 
   drawSoftDisc(scene, 'fx_glow_warm', 'rgba(255,190,90,A)', 22);

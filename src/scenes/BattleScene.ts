@@ -119,6 +119,9 @@ export interface HudState {
   relicLines: string[];
 }
 
+/** margin of distant backdrop visible around the playfield */
+const EDGE_MARGIN = 260;
+
 /** The playable match: world + every system + input. One instance per mission. */
 export class BattleScene extends Phaser.Scene implements GameCtx {
   world!: World;
@@ -287,6 +290,7 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
 
     this.vision.fogColor = REGION[this.mission.map.biome]?.fog ?? 0x060912;
     this.environment.vision = this.vision;
+    this.environment.buildBackdrop(this.mission.map.biome, WORLD_W, WORLD_H, this.mission.map.seed);
     this.environment.build({ torches, banners, ruins });
 
     // ── hero adventures: chests, NPCs, rifts and relic vaults ──
@@ -373,7 +377,13 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
     // ── Roguelite: one random blessing per run (fixed map + fixed main objectives) ──
     // Visual Bible §12: the boss arrival gets a push-in and a short hold (the camera is the
     // cheapest way to say "this matters")
-    this.ai.onBossSpawned = () => this.bossIntroCamera();
+    this.ai.onBossSpawned = () => {
+      // Visual Bible §20: when a boss arrives, lighting + music + camera + UI all change so the
+      // player feels "the boss fight has started"
+      this.lighting.setBossIdentity(this.mission.boss.unitId);
+      audio.playMusic('boss');
+      this.bossIntroCamera();
+    };
     this.runBlessing = this.rollBlessing();
     this.world.mods = { ...this.world.mods, ...this.blessingMods(this.runBlessing.id) };
     this.environment.attachWaterShimmer(this.map.w * 40, this.map.h * 40);
@@ -393,6 +403,8 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
           this.pushFeed('指挥官阵亡，30 秒后复活', 'loss');
         } else if (u.def.ai?.kind === 'boss') {
           this.pushFeed(`${u.def.name} 被击败`, 'boss');
+          this.lighting.setBossIdentity(null);
+          audio.playMusic('battle');
           this.bossDeathCinematic(u.x, u.y);
         } else if (killerTeam === 1) {
           this.pushFeed(`击杀了 ${u.def.name}`, 'kill');
@@ -431,7 +443,8 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
 
     // camera
     const cam = this.cameras.main;
-    cam.setBounds(0, 0, WORLD_W, WORLD_H);
+    // camera bounds extend past the playfield so the horizon band is visible at the edges
+    cam.setBounds(-EDGE_MARGIN, -EDGE_MARGIN, WORLD_W + EDGE_MARGIN * 2, WORLD_H + EDGE_MARGIN * 2);
     cam.setZoom(CFG.BASE_ZOOM);
     cam.centerOn(hero.x, hero.y);
     cam.setBackgroundColor(0x0a0d14);

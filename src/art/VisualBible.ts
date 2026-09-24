@@ -39,6 +39,13 @@ export const STYLE = {
 // 2. FACTIONS — 阵营色（一眼分清敌我）
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * The five-layer colour system every faction, region and boss must define:
+ *   base (dominant) · secondary · accent (the ONE attention colour) · shadow · highlight
+ * `sat` is the saturation tier the colour is allowed to occupy, which is what makes the
+ * 70/20/10 rule enforceable instead of aspirational: environments must stay low-saturation,
+ * characters mid, and only the focus colour is allowed to be loud.
+ */
 export interface FactionStyle {
   name: string;
   /** dominant body/armour colour */
@@ -51,22 +58,29 @@ export interface FactionStyle {
   cloth: number;
   /** the ONE colour that must be visible at minimum zoom (also the rim light) */
   signal: number;
+  /** darkness layer: never pure black, always carrying the faction's hue */
+  shadow: number;
+  /** light layer: the top-lit edge, never pure white */
+  highlight: number;
   /** validity: the player's own faction, the enemy, the neutral wildlife */
   role: 'player' | 'enemy' | 'neutral';
 }
 
 export const FACTION: Record<'dawn' | 'wildborn' | 'voidborn' | 'neutral', FactionStyle> = {
-  // 黎明王国 — 冷蓝钢 + 金饰；信号色是亮金，永远不带红
+  // ── 黎明王国 Dawn Kingdom ── 光明 / 秩序 / 王国 / 希望 / 神圣
+  // Royal Blue 主调 + Warm Gold 强调 + Ivory 布 + Emerald 点缀
   dawn: {
     name: '黎明王国 Dawn Kingdom',
-    primary: 0x4b6cc1,
-    secondary: 0x2c3f7d,
-    metal: 0xb9c4d8,
-    cloth: 0xf0ead6,
-    signal: 0xffd257,
+    primary: 0x4b6cc1,   // Royal Blue
+    secondary: 0x2c3f7d, // deep royal
+    metal: 0xb9c4d8,     // polished steel
+    cloth: 0xf0ead6,     // ivory
+    signal: 0xffd257,    // warm gold — the single attention colour
+    shadow: 0x1b2547,    // never black: carries the blue hue
+    highlight: 0xdce8ff, // top-lit edge, never white
     role: 'player',
   },
-  // 荒野氏族 — 暖棕皮革 + 骨白；信号色是橙红，绝不带蓝
+  // ── 荒野氏族 Wildborn ── 危险 / 野蛮 / 火焰
   wildborn: {
     name: '荒野氏族 Wildborn Clans',
     primary: 0x8a5f3a,
@@ -74,19 +88,23 @@ export const FACTION: Record<'dawn' | 'wildborn' | 'voidborn' | 'neutral', Facti
     metal: 0x7a6a52,
     cloth: 0xc9a86a,
     signal: 0xff8a3a,
+    shadow: 0x2a1a0e,
+    highlight: 0xe8c79a,
     role: 'enemy',
   },
-  // 虚空族 — 紫黑 + 青紫辉光；信号色是冷青，唯一的发光阵营
+  // ── 虚空族 Voidborn ── 腐化 / 黑暗 / 邪恶（Toxic Green 作为腐化点缀）
   voidborn: {
     name: '虚空族 Voidborn',
     primary: 0x6f4fbf,
     secondary: 0x241a3d,
     metal: 0x5a4a8a,
     cloth: 0x2b2145,
-    signal: 0x7fd8ff,
+    signal: 0x7fd8ff,    // electric blue — cold, opposed to the wildborn's warm
+    shadow: 0x120c22,
+    highlight: 0xded4ff,
     role: 'enemy',
   },
-  // 中立野兽 — 灰褐，低饱和，永远不抢视线
+  // ── 中立野兽 Neutral Wildlife ── 低饱和，永不抢焦点
   neutral: {
     name: '中立野兽 Neutral Wildlife',
     primary: 0x6b6152,
@@ -94,8 +112,157 @@ export const FACTION: Record<'dawn' | 'wildborn' | 'voidborn' | 'neutral', Facti
     metal: 0x8a8272,
     cloth: 0x9a8f78,
     signal: 0xd9c9a0,
+    shadow: 0x241f18,
+    highlight: 0xd6cbb4,
     role: 'neutral',
   },
+};
+
+/**
+ * 70 / 20 / 10 —— 最重要的规则。
+ *   70% low-saturation environment, 20% character/building colour, 10% loud focus colour.
+ * `SATURATION_BUDGET` makes it checkable: every colour in the bible is classified into a tier
+ * by HSV saturation and the compliance test asserts the tiers keep their distance.
+ */
+export const SATURATION_BUDGET = {
+  /**
+   * 70% — the world. Ground/grass may keep stylised colour (a fantasy map with grey grass is
+   * worse than a green one); what must stay near-neutral is the ATMOSPHERE: fog, ambient tint
+   * and weather, because those are what would otherwise wash over the characters.
+   */
+  environment: { max: 0.34, target: 0.7 },
+  /** absolute cap for fog / ambient / weather */
+  atmosphere: { max: 0.34 },
+  /** 20% — units, buildings, UI chrome. Mid saturation so silhouettes read. */
+  subject: { min: 0.3, max: 0.72, target: 0.2 },
+  /**
+   * 10% — hero signal, skill cores, boss glow, objectives. The only loud colours allowed.
+   * The floor is 0.45 rather than 0.55 because cool colours (cyan, electric blue) read as vivid
+   * at a lower HSV saturation than warm ones: 0.55 would wrongly disqualify every ice/void hue.
+   */
+  focus: { min: 0.45, target: 0.1 },
+} as const;
+
+/** Colour that tells the player "this is where the eye should go". */
+export const FOCUS = {
+  hero: 0xffd257,
+  objective: 0x3dffa0,
+  importantResource: 0xffd257,
+  danger: 0xff4a3a,
+  boss: 0xff5a3a,
+  interactable: 0xb585ff,
+} as const;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 2b. BOSS IDENTITY — 每个 Boss 拥有独立色彩身份（进入战斗时环境光随之改变）
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface BossIdentity {
+  name: string;
+  /** body dominant */
+  primary: number;
+  /** deep/shadow side */
+  secondary: number;
+  /** glow, eyes, energy — this is what makes it read as a boss */
+  glow: number;
+  /** the metallic trophy colour on the armour/horns */
+  gold: number;
+  /** the ambient light the arena takes on while this boss is alive */
+  arena: { ambient: number; alpha: number; fog: number };
+  /** aura radius multiplier vs a soldier */
+  aura: number;
+}
+
+export const BOSS_IDENTITY: Record<string, BossIdentity> = {
+  // Ancient Dragon — Deep Crimson / Black / Gold
+  ancientdragon: {
+    name: '远古巨龙 Ancient Dragon',
+    primary: 0x8f1f24,
+    secondary: 0x1a0d10,
+    glow: 0xff5a3a,
+    gold: 0xffd257,
+    arena: { ambient: 0xff6a4a, alpha: 0.26, fog: 0x1a0808 },
+    aura: 2.6,
+  },
+  // Void Sorcerer — Purple / Black / Electric Blue
+  voidsorcerer: {
+    name: '虚空巫师 Void Sorcerer',
+    primary: 0x6f4fbf,
+    secondary: 0x140e24,
+    glow: 0x7fd8ff,
+    gold: 0xc8b8ff,
+    arena: { ambient: 0x8f6fff, alpha: 0.24, fog: 0x0c0818 },
+    aura: 2.2,
+  },
+  // Thornmaw — a corrupted forest beast: toxic green / bone / ember
+  thornmaw: {
+    name: '棘齿巨兽 Thornmaw',
+    primary: 0x4a6b32,
+    secondary: 0x1c2414,
+    glow: 0x9fe07a,
+    gold: 0xd9c9a0,
+    arena: { ambient: 0xa8d070, alpha: 0.2, fog: 0x0e1408 },
+    aura: 2.0,
+  },
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 2c. MATERIALS — 材质：不同材料必须有不同高光/纹理/粒子（即使 2D 也要模拟）
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface MaterialStyle {
+  name: string;
+  /** how bright the top-lit edge is drawn (0 = matte, 1 = mirror) */
+  specular: number;
+  /** how much noise/grain the generator adds */
+  grain: number;
+  /** does light pass through it (crystal / magic) */
+  translucent: boolean;
+  /** emissive glow strength (magic, crystal, lava) */
+  emission: number;
+  /** particle behaviour when this material is hit or destroyed */
+  hit: { sparks: number; debris: number; dust: number; debrisColor: number };
+}
+
+export const MATERIAL: Record<'metal' | 'stone' | 'wood' | 'cloth' | 'grass' | 'water' | 'crystal' | 'magic' | 'flesh' | 'scale', MaterialStyle> = {
+  metal: { name: '金属', specular: 0.95, grain: 0.06, translucent: false, emission: 0, hit: { sparks: 9, debris: 2, dust: 1, debrisColor: 0xb9a884 } },
+  stone: { name: '石材', specular: 0.22, grain: 0.5, translucent: false, emission: 0, hit: { sparks: 1, debris: 8, dust: 3, debrisColor: 0x8a8a92 } },
+  wood: { name: '木材', specular: 0.3, grain: 0.34, translucent: false, emission: 0, hit: { sparks: 0, debris: 7, dust: 2, debrisColor: 0x8a5f3a } },
+  cloth: { name: '布料', specular: 0.12, grain: 0.18, translucent: false, emission: 0, hit: { sparks: 0, debris: 3, dust: 2, debrisColor: 0xc9a86a } },
+  grass: { name: '草地', specular: 0.1, grain: 0.42, translucent: false, emission: 0, hit: { sparks: 0, debris: 4, dust: 4, debrisColor: 0x559042 } },
+  water: { name: '水面', specular: 1, grain: 0.02, translucent: true, emission: 0, hit: { sparks: 3, debris: 0, dust: 0, debrisColor: 0x7fd8ff } },
+  crystal: { name: '水晶', specular: 0.8, grain: 0.05, translucent: true, emission: 0.5, hit: { sparks: 12, debris: 5, dust: 0, debrisColor: 0x9f7fff } },
+  magic: { name: '魔法', specular: 0.6, grain: 0, translucent: true, emission: 1, hit: { sparks: 14, debris: 0, dust: 0, debrisColor: 0xc8a4ff } },
+  flesh: { name: '皮肉', specular: 0.35, grain: 0.1, translucent: false, emission: 0, hit: { sparks: 0, debris: 2, dust: 1, debrisColor: 0xb03a3a } },
+  scale: { name: '鳞甲', specular: 0.7, grain: 0.2, translucent: false, emission: 0, hit: { sparks: 5, debris: 4, dust: 1, debrisColor: 0x8f1f24 } },
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 2d. WEATHER — 天气（不能影响玩家判断；Boss 战轻灰、森林薄雾、魔法区浮粒）
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface WeatherStyle {
+  name: string;
+  kind: 'none' | 'mist' | 'rain' | 'snow' | 'ash' | 'magic';
+  color: number;
+  /** particles per screen */
+  count: number;
+  alpha: number;
+  size: number;
+  /** vertical speed (negative = falling) */
+  fall: number;
+  drift: number;
+  /** opacity of the drifting mist band layer, 0 = none */
+  mist: number;
+}
+
+export const WEATHER: Record<'clear' | 'mist' | 'ash' | 'rain' | 'snow' | 'magic', WeatherStyle> = {
+  clear: { name: '晴', kind: 'none', color: 0xfff0c8, count: 0, alpha: 0, size: 1, fall: 0, drift: 0, mist: 0 },
+  mist: { name: '薄雾', kind: 'mist', color: 0xdfe8e0, count: 26, alpha: 0.16, size: 2.6, fall: -2, drift: 16, mist: 0.1 },
+  ash: { name: '灰烬', kind: 'ash', color: 0xb8b2ac, count: 46, alpha: 0.34, size: 1.8, fall: 9, drift: 7, mist: 0.06 },
+  rain: { name: '雨', kind: 'rain', color: 0xa8c8e0, count: 70, alpha: 0.3, size: 1.4, fall: 190, drift: 26, mist: 0.08 },
+  snow: { name: '雪', kind: 'snow', color: 0xe8f0ff, count: 52, alpha: 0.5, size: 2.0, fall: 26, drift: 12, mist: 0.12 },
+  magic: { name: '魔法浮粒', kind: 'magic', color: 0xc8a4ff, count: 40, alpha: 0.42, size: 2.2, fall: -6, drift: 10, mist: 0.04 },
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -441,11 +608,41 @@ export function contrast(a: number, b: number): number {
   return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
 }
 
+/** HSV saturation (0..1) — the metric behind the 70/20/10 budget rule. */
+export function saturation(color: number): number {
+  const r = ((color >> 16) & 0xff) / 255;
+  const g = ((color >> 8) & 0xff) / 255;
+  const b = (color & 0xff) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  if (max === 0) return 0;
+  return (max - min) / max;
+}
+
+/**
+ * Which saturation tier a colour belongs to. The 70/20/10 rule is enforced by requiring every
+ * colour to fall in its own tier: environment low, subjects mid, focus loud.
+ */
+export function satTier(color: number): 'environment' | 'subject' | 'focus' {
+  const s = saturation(color);
+  const l = luminance(color);
+  // near-black and near-white carry no usable chroma: fog is "dark", not "loud". Judging them by
+  // HSV saturation would call a near-black navy the loudest colour in the palette.
+  if (l < 0.045 || l > 0.82) return 'environment';
+  if (s <= SATURATION_BUDGET.environment.max) return 'environment';
+  if (s >= SATURATION_BUDGET.focus.min) return 'focus';
+  return 'subject';
+}
+
 /** Every colour the game is allowed to draw with — the compliance test walks this list. */
 export const ALL_COLORS: number[] = Array.from(
   new Set<number>([
     STYLE.outline.color,
-    ...Object.values(FACTION).flatMap((f) => [f.primary, f.secondary, f.metal, f.cloth, f.signal]),
+    ...Object.values(FACTION).flatMap((f) => [f.primary, f.secondary, f.metal, f.cloth, f.signal, f.shadow, f.highlight]),
+    ...Object.values(BOSS_IDENTITY).flatMap((b) => [b.primary, b.secondary, b.glow, b.gold, b.arena.ambient, b.arena.fog]),
+    ...Object.values(FOCUS),
+    ...Object.values(WEATHER).map((w) => w.color),
+    ...Object.values(MATERIAL).map((m) => m.hit.debrisColor),
     ...Object.values(REGION).flatMap((r) => [r.ground, r.groundAlt, r.stone, r.ambient, r.fog, r.accent]),
     ...Object.values(ELEMENT).flatMap((e) => [e.core, e.bright, e.trail, e.residue, e.number]),
     ...Object.values(REGION_VFX).flatMap((v) => [v.mote.color, v.spark?.color ?? v.mote.color, v.impact.smoke, v.impact.residue, v.impact.debris]),
@@ -465,3 +662,43 @@ export const ALL_COLORS: number[] = Array.from(
     TYPE.outline.color,
   ]),
 );
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 2e. DEPTH LAYERS — 地图层次 Foreground / Midground / Background + 大气透视
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Three readable depth bands. The rule that makes them read: the further away something is,
+ * the less contrast and saturation it keeps, and the closer it moves toward the fog colour.
+ * This is "atmospheric perspective" and it is what stops a top-down map from looking like a
+ * flat sticker sheet.
+ */
+export const DEPTH_LAYERS = {
+  /** distant hills / mountains / castle silhouettes — drawn behind everything */
+  background: {
+    name: '远景',
+    /** blended toward the region fog by this much */
+    haze: 0.55,
+    /** parallax factor against the camera (0 = pinned to the world) */
+    parallax: 0.06,
+    /** fraction of the original contrast kept */
+    contrast: 0.45,
+    bandHeights: [0.62, 0.5, 0.4],
+  },
+  /** units, roads, resources — full contrast, full saturation */
+  midground: { name: '中景', haze: 0.08, parallax: 0, contrast: 0.95 },
+  /** trees, rocks, grass tufts, buildings near the camera — most detail, slightly darker */
+  foreground: { name: '近景', haze: 0, parallax: 0, contrast: 1, darken: 0.05 },
+} as const;
+
+/** How much a given visual element is allowed to compete for attention. */
+export const FOCUS_TIERS = {
+  /** exactly one per frame: the hero */
+  primary: { contrastFloor: 0.55, outlineMul: 1.25, render: 'hero' },
+  /** the boss, the current objective marker */
+  secondary: { contrastFloor: 0.4, outlineMul: 1.1, render: 'boss' },
+  /** units, buildings */
+  tertiary: { contrastFloor: 0.25, outlineMul: 1, render: 'unit' },
+  /** terrain, decor, weather — must stay under the tertiary floor */
+  background: { contrastFloor: 0, outlineMul: 0.9, render: 'decor' },
+} as const;

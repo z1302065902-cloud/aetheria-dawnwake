@@ -37,7 +37,11 @@ const built = await esbuild.build({
   platform: 'node',
 });
 const bible = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
-const { STYLE, FACTION, REGION, REGION_VFX, ELEMENT, SPECIAL, LIGHT, VFX, RANK, UI, TYPE, PROPORTIONS, CAMERA, ALL_COLORS, contrast, luminance } = bible;
+const {
+  STYLE, FACTION, REGION, REGION_VFX, ELEMENT, SPECIAL, LIGHT, VFX, RANK, UI, TYPE, PROPORTIONS,
+  CAMERA, SATURATION_BUDGET, FOCUS, BOSS_IDENTITY, MATERIAL, WEATHER, DEPTH_LAYERS, FOCUS_TIERS,
+  ALL_COLORS, contrast, luminance, saturation, satTier,
+} = bible;
 const hex = (n) => `#${n.toString(16).padStart(6, '0')}`;
 
 // ── 1. structural rules ─────────────────────────────────────────────────────
@@ -64,6 +68,141 @@ const enemyColours = new Set([
   FACTION.voidborn.primary, FACTION.voidborn.secondary, FACTION.voidborn.metal, FACTION.voidborn.cloth,
 ]);
 check('bible: the player signal colour is never used by an enemy faction', !enemyColours.has(FACTION.dawn.signal), hex(FACTION.dawn.signal));
+
+// ── 1b. five-layer colour system + the 70/20/10 rule ───────────────────────
+check(
+  'colour: every faction defines all five layers (base/secondary/accent/shadow/highlight)',
+  Object.values(FACTION).every((f) => f.primary && f.secondary && f.signal && f.shadow && f.highlight),
+  Object.keys(FACTION).join(' '),
+);
+check(
+  'colour: faction shadows carry their hue instead of being black',
+  Object.values(FACTION).every((f) => f.shadow !== 0x000000 && saturation(f.shadow) > 0.25),
+  Object.values(FACTION).map((f) => hex(f.shadow)).join(' '),
+);
+check(
+  'colour: faction highlights are near-light but never pure white',
+  Object.values(FACTION).every((f) => f.highlight !== 0xffffff && luminance(f.highlight) > 0.6),
+  Object.values(FACTION).map((f) => hex(f.highlight)).join(' '),
+);
+// the 70/20/10 rule, measured rather than asserted in prose
+// The three bands must be ordered, and the ATMOSPHERE (fog/ambient/weather) must be the calmest
+// thing on screen — those layers cover everything else, so if they are loud the units vanish.
+// Visual weight, not raw hue: what matters is how much of the frame a colour actually covers.
+// A saturated tint is fine when it is laid on thinly (a 20% arena ambient); a saturated colour at
+// 88% alpha (the fog) would drown every unit, so the layers humans actually see through are the
+// ones held to a neutral band.
+// Visual weight = saturation × alpha × frame coverage. A 2px firefly at 40% alpha has almost no
+// weight no matter how vivid it is; a full-screen fog wash at 88% would dominate even if it were
+// only mildly tinted. This is the metric the 70/20/10 rule actually protects.
+const FRAME = 1920 * 1080;
+const coverage = (count, size) => Math.min(1, (count * size * size) / FRAME);
+const atmosphere = [
+  ...Object.values(REGION).map((r) => ({ name: `fog ${r.name}`, c: r.fog, a: 1, cover: 1 })),
+  ...Object.values(REGION).map((r) => ({ name: `ambient ${r.name}`, c: r.ambient, a: r.ambientAlpha, cover: 1 })),
+  ...Object.values(WEATHER).filter((w) => w.count > 0).map((w) => ({ name: `weather ${w.name}`, c: w.color, a: w.alpha, cover: coverage(w.count, w.size) })),
+  ...Object.entries(REGION_VFX).map(([k, v]) => ({ name: `mote ${k}`, c: v.mote.color, a: v.mote.alpha, cover: coverage(v.mote.count, 3.2) })),
+];
+// chroma weight: a near-black fog has no perceived hue, so its chroma contribution is zero even
+// though its HSV saturation is high. satTier() already encodes that luminance guard.
+const chroma = (c) => {
+  const tier = satTier(c);
+  if (tier === 'focus') return saturation(c);
+  if (tier === 'subject') return saturation(c) * 0.5;
+  return 0;
+};
+const weight = (x) => chroma(x.c) * x.a * x.cover;
+const heaviest = [...atmosphere].sort((a, b) => weight(b) - weight(a)).slice(0, 3);
+check(
+  'colour 70/20/10: no atmosphere layer has enough visual weight to drown the units',
+  atmosphere.every((x) => weight(x) < 0.12),
+  heaviest.map((x) => `${x.name} w=${weight(x).toFixed(3)}`).join(' · '),
+);
+check(
+  'colour: ambient tints are thin enough to tint the ground without recolouring units',
+  Object.values(REGION).every((r) => r.ambientAlpha <= 0.25),
+  Object.values(REGION).map((r) => `${r.name.split(' ')[0]}:${r.ambientAlpha}`).join(' '),
+);
+const fogBand = Object.values(REGION).map((r) => r.fog);
+check(
+  'colour: fog is near-black or near-neutral in every region (never a coloured wash)',
+  fogBand.every((c) => luminance(c) < 0.06),
+  fogBand.map((c) => `${hex(c)} L=${luminance(c).toFixed(3)}`).join(' '),
+);
+const meanSat = (arr) => (arr.length ? arr.reduce((a, x) => a + saturation(x), 0) / arr.length : 0);
+const envBand = [
+  ...Object.values(REGION).flatMap((r) => [r.ground, r.groundAlt, r.stone]),
+  ...Object.values(MATERIAL).map((m) => m.hit.debrisColor),
+];
+const subjectBand = [
+  ...Object.values(FACTION).flatMap((f) => [f.primary, f.metal, f.cloth]),
+  ...Object.values(MATERIAL).filter((m) => m.specular > 0.5).map((m) => m.hit.debrisColor),
+];
+const focusBand = Object.values(FACTION).filter((f) => f.role !== 'neutral').map((f) => f.signal);
+check(
+  'colour 70/20/10: saturation rises through the bands (world < subjects < focus)',
+  meanSat(envBand) < meanSat(focusBand) - 0.1 && meanSat(subjectBand) < meanSat(focusBand) - 0.05,
+  `env ${meanSat(envBand).toFixed(2)} · subject ${meanSat(subjectBand).toFixed(2)} · focus ${meanSat(focusBand).toFixed(2)}`,
+);
+const focusColours = [
+  ...Object.values(FACTION).filter((f) => f.role !== 'neutral').map((f) => f.signal),
+  ...Object.values(FOCUS),
+  SPECIAL.boss,
+  SPECIAL.crit,
+];
+const focusQuiet = focusColours.filter((c) => saturation(c) < SATURATION_BUDGET.focus.min);
+check(
+  'colour 70/20/10: every focus colour is actually loud enough to pull the eye',
+  focusQuiet.length === 0,
+  `${focusColours.length} focus colours, ${focusQuiet.length} too dull: ${focusQuiet.map(hex).join(' ')}`,
+);
+// loud colours must be the minority of the whole palette
+const loudShare = ALL_COLORS.filter((c) => satTier(c) === 'focus').length / ALL_COLORS.length;
+check(
+  'colour 70/20/10: loud colours are a minority of the palette (roughly the 10% band)',
+  loudShare <= 0.35,
+  `${(loudShare * 100).toFixed(0)}% of ${ALL_COLORS.length} colours are high-saturation`,
+);
+check(
+  'colour: the two enemy factions never share the player signal colour',
+  !Object.values(FACTION).filter((f) => f.role === 'enemy').some((f) => f.signal === FACTION.dawn.signal || f.primary === FACTION.dawn.signal),
+  hex(FACTION.dawn.signal),
+);
+
+// ── 1c. boss identity, materials, weather, depth ────────────────────────────
+for (const boss of ['ancientdragon', 'voidsorcerer', 'thornmaw']) {
+  const b = BOSS_IDENTITY[boss];
+  check(
+    `boss identity: ${boss} has its own palette, glow and arena lighting`,
+    !!b && !!b.primary && !!b.glow && !!b.arena.ambient && b.aura > 1.5,
+    b ? `${hex(b.primary)} glow ${hex(b.glow)} aura ${b.aura}x` : 'MISSING',
+  );
+}
+const bossGlows = new Set(Object.values(BOSS_IDENTITY).map((b) => b.glow));
+check('boss identity: every boss reads differently (distinct glow colours)', bossGlows.size === Object.keys(BOSS_IDENTITY).length, [...bossGlows].map(hex).join(' '));
+check(
+  'material: metal is specular, stone is rough, wood is warm, crystal and magic emit light',
+  MATERIAL.metal.specular > 0.8 && MATERIAL.stone.specular < 0.35 && MATERIAL.stone.grain > 0.4 && MATERIAL.wood.grain > 0.25 && MATERIAL.crystal.emission > 0 && MATERIAL.magic.emission >= 1,
+  `metal ${MATERIAL.metal.specular} / stone ${MATERIAL.stone.specular} / crystal emit ${MATERIAL.crystal.emission}`,
+);
+check(
+  'material: every material defines its own impact particles (no shared generic hit)',
+  Object.values(MATERIAL).every((m) => m.hit.sparks + m.hit.debris + m.hit.dust > 0),
+  Object.keys(MATERIAL).join(' '),
+);
+check('weather: weather types exist and none of them is heavy enough to hide units', Object.values(WEATHER).every((w) => w.alpha <= 0.5), Object.values(WEATHER).map((w) => `${w.name}:${w.alpha}`).join(' '));
+check(
+  'depth: background is hazed and loses contrast, foreground keeps full detail',
+  DEPTH_LAYERS.background.haze > 0.3 && DEPTH_LAYERS.background.contrast < DEPTH_LAYERS.foreground.contrast && DEPTH_LAYERS.foreground.darken > 0,
+  `bg haze ${DEPTH_LAYERS.background.haze} contrast ${DEPTH_LAYERS.background.contrast} / fg contrast ${DEPTH_LAYERS.foreground.contrast}`,
+);
+check(
+  'focus tiers: exactly one primary tier and decor sits below units',
+  FOCUS_TIERS.primary.contrastFloor > FOCUS_TIERS.secondary.contrastFloor &&
+    FOCUS_TIERS.secondary.contrastFloor > FOCUS_TIERS.tertiary.contrastFloor &&
+    FOCUS_TIERS.tertiary.contrastFloor > FOCUS_TIERS.background.contrastFloor,
+  Object.entries(FOCUS_TIERS).map(([k, v]) => `${k}:${v.contrastFloor}`).join(' '),
+);
 
 // ── 2. contrast (readability) ───────────────────────────────────────────────
 const cTextPanel = contrast(UI.text.primary, UI.panel);

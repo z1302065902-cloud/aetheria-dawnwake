@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
 import { DEPTH, TILE } from '../config/Constants';
+import { DEPTH_LAYERS, REGION } from '../art/VisualBible';
+import { drawBackdropTexture } from '../art/SpriteFactory';
 import { tileAt, type GeneratedMap } from '../world/MapGen';
 import { Tile } from '../config/Constants';
 import { shade } from '../art/Palette';
@@ -45,6 +47,7 @@ export class EnvironmentSystem {
   private t = 0;
   private glints: SwaySprite[] = [];
   private glows: Phaser.GameObjects.Image[] = [];
+  private backdrop: Phaser.GameObjects.Image[] = [];
   stats: DecorStats = { trees: 0, rocks: 0, ruins: 0, torches: 0, banners: 0, glints: 0, animatedThisFrame: 0 };
 
   constructor(
@@ -53,6 +56,27 @@ export class EnvironmentSystem {
   ) {}
 
   /** Places decoration from the tile map plus hand-authored points (torches, banners). */
+  /**
+   * Background band (Visual Bible §2e): layered hill silhouettes pinned behind everything, hazed
+   * toward the region fog so the map gets a horizon instead of ending in a hard edge.
+   */
+  buildBackdrop(region: keyof typeof REGION, worldW: number, worldH: number, seed: number): void {
+    const R = REGION[region] ?? REGION.valley;
+    for (let band = 0; band < DEPTH_LAYERS.background.bandHeights.length; band++) {
+      const key = `backdrop_${region}_${band}`;
+      if (!this.scene.textures.exists(key)) drawBackdropTexture(this.scene, key, R.ground, R.fog, seed + band * 7, band);
+      const bandH = worldH * (1 - DEPTH_LAYERS.background.bandHeights[band]);
+      const img = this.scene.add
+        .image(0, worldH * DEPTH_LAYERS.background.bandHeights[band], key)
+        .setOrigin(0, 0)
+        .setDisplaySize(worldW, Math.max(120, bandH))
+        .setDepth(DEPTH.BACKDROP + band * 0.01)
+        .setAlpha(0.55 + band * 0.12)
+        .setScrollFactor(1 - DEPTH_LAYERS.background.parallax * (3 - band));
+      this.backdrop.push(img);
+    }
+  }
+
   build(extra: { torches: Array<{ x: number; y: number }>; banners: Array<{ x: number; y: number; color: number }>; ruins: Array<{ x: number; y: number }> }): void {
     const rng = (n: number) => {
       const x = Math.sin(n * 12.9898) * 43758.5453;
