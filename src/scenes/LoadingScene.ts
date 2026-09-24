@@ -4,7 +4,7 @@ import { audio } from '../audio/AudioBus';
 import { save } from '../core/SaveManager';
 import { UI, FACTION, REGION, toCss, shade } from '../art/VisualBible';
 import { drawPanel, text as uiText } from '../ui/UiKit';
-import { biAuto } from '../data/i18n';
+import { biAuto, en } from '../data/i18n';
 import { MISSIONS } from '../data/missions';
 
 /**
@@ -94,8 +94,15 @@ export class LoadingScene extends Phaser.Scene {
     this.add
       .text(W / 2, py + 34, 'AETHERIA', { fontFamily: 'Georgia, "Times New Roman", serif', fontSize: '40px', color: toCss(FACTION.dawn.signal), fontStyle: 'bold' })
       .setOrigin(0.5, 0);
+    // The loading panel title is bilingual on one line, and the English gets its own line so the
+    // letter-spaced Chinese half does not smear into it.
     this.add
-      .text(W / 2, py + 80, '破  晓  之  誓', { fontFamily: '"Trebuchet MS", sans-serif', fontSize: '17px', color: toCss(UI.text.dim) })
+      .text(W / 2, py + 80, `破  晓  之  誓\n${en('破  晓  之  誓')}`, {
+        fontFamily: '"Trebuchet MS", sans-serif',
+        fontSize: '17px',
+        color: toCss(UI.text.dim),
+        align: 'center',
+      })
       .setOrigin(0.5, 0)
       .setLetterSpacing(8);
 

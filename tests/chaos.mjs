@@ -130,12 +130,15 @@ await page.evaluate(() => {
   m.render();
 });
 await sleep(300);
+// Click in the margin / title band: spamming for 100 clicks must not break the UI, but the grid
+// used to sit exactly on the campaign rows, so a click could legitimately start a mission and the
+// "the menu is still up" assertion below would read that correct behaviour as a failure.
 for (let i = 0; i < 60; i++) {
-  await page.mouse.click(200 + (i % 7) * 60, 300 + (i % 5) * 40, { delay: 0 });
+  await page.mouse.click(40 + (i % 7) * 38, 110 + (i % 5) * 40, { delay: 0 });
 }
 for (let i = 0; i < 40; i++) {
   await page.keyboard.press('Escape');
-  await page.mouse.click(640, 200, { delay: 0 });
+  await page.mouse.click(640, 118, { delay: 0 });
 }
 await sleep(500);
 const menuAlive = await page.evaluate(() => {
@@ -143,7 +146,16 @@ const menuAlive = await page.evaluate(() => {
   const menu = window.__AETHERIA__.scene.getScene('Menu');
   return { active: scenes, screen: menu.screen, children: menu.children.list.length };
 });
-check('chaos: 100 rapid clicks / Escape presses do not break the menu', menuAlive.active.includes('Menu') && menuAlive.children > 0, JSON.stringify(menuAlive));
+// Either outcome is healthy: the menu is still up, or a click legitimately started a battle. What
+// must not happen is a dead UI (no active scene, or an empty menu) or a thrown error.
+const uiAlive =
+  (menuAlive.active.includes('Menu') && menuAlive.children > 0) ||
+  (menuAlive.active.includes('Battle') && menuAlive.active.includes('Hud'));
+check(
+  'chaos: 100 rapid clicks / Escape presses leave the UI alive (no dead scene, no empty menu)',
+  uiAlive && errors.length === 0,
+  `${JSON.stringify(menuAlive)}${errors.length ? ` · errors: ${errors.slice(0, 2).join(' | ')}` : ''}`,
+);
 
 // ── 2. rapid mission switching ──────────────────────────────────────────────
 for (const id of ['m01', 'm05', 'm09', 'm01', 'm10']) {

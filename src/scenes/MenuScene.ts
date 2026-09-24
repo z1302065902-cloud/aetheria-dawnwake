@@ -10,7 +10,7 @@ import { ITEMS, RELICS } from '../data/items';
 import { TALENTS, TALENT_BRANCH_LABEL } from '../data/talents';
 import { equipFromInventory, heroSheet, unequipSlot } from '../systems/Equipment';
 import { metaOf } from '../art/SpriteFactory';
-import { bi, biAuto, biName } from '../data/i18n';
+import { bi, biAuto, biLines, biName } from '../data/i18n';
 
 type Screen = 'main' | 'campaign' | 'deploy' | 'heroes' | 'settings';
 
@@ -139,12 +139,17 @@ export class MenuScene extends Phaser.Scene {
     }
   }
 
+  /** Main-menu buttons must fit a bilingual caption ("开始战役 · 翡翠谷地 · Start Campaign · Emerald Valley"). */
+  private menuButtonW(): number {
+    return Math.min(560 * this.s, this.W * 0.66);
+  }
+
   private addButton(x: number, y: number, w: number, h: number, label: string, onClick: () => void, enabled = true, fill?: number): Button {
     const b = new Button(this, x, y, w, h, label, () => {
       audio.init();
       audio.sfx('click', 0.4);
       onClick();
-    }, { fontSize: 16 * this.s, fill });
+    }, { fontSize: 14 * this.s, fill });
     b.setEnabled(enabled);
     this.root.add([b.rect, b.label]);
     return b;
@@ -167,32 +172,40 @@ export class MenuScene extends Phaser.Scene {
     const bx = this.W / 2;
     let y = this.H * 0.42;
     const gap = 52 * s;
-    this.addButton(bx, y, 300 * s, 42 * s, '开始战役 · 翡翠谷地', () => this.startMission('m01'));
+    this.addButton(bx, y, this.menuButtonW(), 42 * s, '开始战役 · 翡翠谷地', () => this.startMission('m01'));
     y += gap;
-    this.addButton(bx, y, 300 * s, 42 * s, '关卡选择', () => {
+    this.addButton(bx, y, this.menuButtonW(), 42 * s, '关卡选择', () => {
       this.screen = 'campaign';
       this.render();
     });
     y += gap;
-    this.addButton(bx, y, 300 * s, 42 * s, '英雄 / 装备 / 遗物', () => {
+    this.addButton(bx, y, this.menuButtonW(), 42 * s, '英雄 / 装备 / 遗物', () => {
       this.screen = 'heroes';
       this.render();
     });
     y += gap;
-    this.addButton(bx, y, 300 * s, 42 * s, '设置与音频', () => {
+    this.addButton(bx, y, this.menuButtonW(), 42 * s, '设置与音频', () => {
       this.screen = 'settings';
       this.render();
     });
     y += gap;
-    this.addButton(bx, y, 300 * s, 42 * s, '继续上次进度', () => {
+    this.addButton(bx, y, this.menuButtonW(), 42 * s, '继续上次进度', () => {
       const unlocked = save.current.campaign.unlockedMissions;
       const last = unlocked[unlocked.length - 1] ?? 'm01';
       this.startMission(PLAYABLE_MISSIONS.has(last) ? last : 'm01');
     });
 
+    // Footer: each line is a bilingual BLOCK (Chinese line + English line), so the two blocks need
+    // their own vertical slots — at the old 20px spacing the English half of the first block was
+    // drawn straight through the second block.
     const stats = save.current.stats;
-    this.addText(this.W / 2, this.H - 44 * s, `本地存档：通关 ${stats.victories}/${stats.matches} 场 · 英雄等级 ${save.current.hero.level} · 遗物 ${save.current.hero.relics.length}`, 13, toCss(PAL.uiDim));
-    this.addText(this.W / 2, this.H - 24 * s, '本作全部美术与音效均由代码程序化生成，不含任何第三方素材。', 12, toCss(PAL.uiDim));
+    const footerY = this.H - 92 * s;
+    for (const [i, line] of [
+      `本地存档：通关 ${stats.victories}/${stats.matches} 场 · 英雄等级 ${save.current.hero.level} · 遗物 ${save.current.hero.relics.length}`,
+      '本作全部美术与音效均由代码程序化生成，不含任何第三方素材。',
+    ].entries()) {
+      this.addText(this.W / 2, footerY + i * 44 * s, biLines(line), i === 0 ? 13 : 12, toCss(PAL.uiDim));
+    }
   }
 
   private renderCampaign(): void {
@@ -203,10 +216,12 @@ export class MenuScene extends Phaser.Scene {
     const panelH = this.H * 0.88;
     drawPanel(this.g, panelX, panelY, panelW, panelH, { header: true, alpha: 0.9 });
     const cleared = Object.keys(save.current.campaign.completed).length;
-    this.addText(this.W / 2, panelY + 14 * s, `战役 · 三幕十关　已通关 ${cleared}/10`, 18, toCss(PAL.uiGold), [0.5, 0.5], true);
+    this.addText(this.W / 2, panelY + 14 * s, `战役 · 三幕十关　已通关 ${cleared}/10`, 16, toCss(PAL.uiGold), [0.5, 0.5], true);
 
     const unlocked = save.current.campaign.unlockedMissions;
-    const rowH = 34 * s;
+    // Rows are taller now: each briefing is bilingual and wraps to two or three lines, and the
+    // row label is bilingual as well.
+    const rowH = 48 * s;
     let y = panelY + 40 * s;
     for (const act of ACTS) {
       // act header with its own progress, so the campaign reads as a story rather than a list
@@ -214,7 +229,7 @@ export class MenuScene extends Phaser.Scene {
       void actDone;
       const actOpen = act.missions.some((id) => unlocked.includes(id) && PLAYABLE_MISSIONS.has(id));
       this.root.add(this.add.rectangle(panelX + 16 * s, y, panelW - 32 * s, 26 * s, PAL.uiPanelLight, 0.5).setOrigin(0, 0.5));
-      this.addText(panelX + 26 * s, y, `${bi(act.name)}　${bi(act.sub)}`, 14, actOpen ? toCss(PAL.uiGold) : toCss(PAL.uiDim), [0, 0.5], actOpen);
+      this.addText(panelX + 26 * s, y, `${bi(act.name)}  ·  ${bi(act.sub)}`, 13, actOpen ? toCss(PAL.uiGold) : toCss(PAL.uiDim), [0, 0.5], actOpen);
       this.addText(panelX + panelW - 26 * s, y, `${actDone}/${act.missions.length}`, 13, toCss(PAL.uiDim), [1, 0.5]);
       y += rowH;
       for (const mid of act.missions) {
@@ -224,11 +239,11 @@ export class MenuScene extends Phaser.Scene {
         const isUnlocked = unlocked.includes(m.id) && playable;
         const done = save.current.campaign.completed[m.id];
         const stars = done ? '★'.repeat(done.stars) + '☆'.repeat(3 - done.stars) : isUnlocked ? '可挑战' : '未解锁';
-        // compose from bilingual parts: the row mixes a name, a biome, a time of day and a state
-        const biome = m.map.biome === 'valley' ? '绿谷' : m.map.biome === 'forest' ? '森林' : '堡垒';
-        const tod = m.timeOfDay === 'night' ? '夜' : m.timeOfDay === 'dusk' ? '黄昏' : m.timeOfDay === 'dawn' ? '黎明' : '日';
-        const label = `${String(m.index).padStart(2, '0')}  ${biName(m.name, m.enName)} · ${bi(biome)}${bi(tod, '')} [${bi(stars)}]`;
-        this.addButton(panelX + panelW * 0.2, y, panelW * 0.38, rowH - 4 * s, label, () => {
+        // The row label carries the number, the name in both languages and the state. The biome and
+        // time of day were dropped from it: they duplicated the name ("格林谷地 · 绿谷日"), and the
+        // deployment screen shows them properly.
+        const label = `${String(m.index).padStart(2, '0')}  ${biName(m.name, m.enName)}  [${bi(stars)}]`;
+        this.addButton(panelX + panelW * 0.16, y, panelW * 0.42, rowH - 8 * s, label, () => {
           if (!isUnlocked) {
             this.addToast('先通关上一关');
             return;
@@ -238,8 +253,8 @@ export class MenuScene extends Phaser.Scene {
           this.screen = 'deploy';
           this.render();
         }, isUnlocked);
-        const t = this.addText(panelX + panelW * 0.41, y, m.brief, 12, toCss(PAL.uiDim), [0, 0.5]);
-        t.setWordWrapWidth(panelW * 0.56);
+        const t = this.addText(panelX + panelW * 0.60, y, biLines(m.brief), 10, toCss(PAL.uiDim), [0, 0.5]);
+        t.setWordWrapWidth(panelW * 0.37, true);
         y += rowH;
       }
       y += 6 * s;
@@ -269,24 +284,29 @@ export class MenuScene extends Phaser.Scene {
       const selected = this.selectedHero === id;
       if (selected) {
         this.g.lineStyle(2, 0xffd257, 0.9);
-        this.g.strokeRoundedRect(x - colW / 2 + 8 * s, y - 8 * s, colW - 16 * s, 152 * s, 8);
+        this.g.strokeRoundedRect(x - colW / 2 + 8 * s, y - 8 * s, colW - 16 * s, 180 * s, 8);
       }
       const img = this.add.image(x, y + 30 * s, `u_${id}`).setScale(1.5 * s * metaOf(`u_${id}`).sx);
       this.root.add(img);
-      this.addText(x, y + 66 * s, `${def.name} · ${def.title}`, 15, toCss(PAL.uiGold), [0.5, 0.5], true);
-      this.addText(
+      // the bilingual name is wider than the card, so it is wrapped to the card width
+      const nameT = this.addText(x, y + 62 * s, biLines(`${def.name} · ${def.title}`), 13, toCss(PAL.uiGold), [0.5, 0], true);
+      nameT.setWordWrapWidth(colW - 34 * s, true);
+      const statT = this.addText(
         x,
-        y + 82 * s,
-        `${def.role === 'tank' ? '近战坦克' : def.role === 'mage' ? '远程法术 AOE' : '远程输出'}　HP ${def.base.hp} / 攻 ${def.base.attack} / 甲 ${def.base.armor}`,
-        12,
+        y + 62 * s + nameT.height + 3 * s,
+        biLines(
+          `${def.role === 'tank' ? '近战坦克' : def.role === 'mage' ? '远程法术 AOE' : '远程输出'}　HP ${def.base.hp} / 攻 ${def.base.attack} / 甲 ${def.base.armor}`,
+        ),
+        9,
         toCss(PAL.uiDim),
-        [0.5, 0.5],
+        [0.5, 0],
       );
+      statT.setWordWrapWidth(colW - 34 * s, true);
       def.skills.forEach((sid, k) => {
-        const icon = this.add.image(x - 66 * s + k * 44 * s, y + 104 * s, `icon_${sid}`).setDisplaySize(34 * s, 34 * s);
+        const icon = this.add.image(x - 66 * s + k * 44 * s, y + 126 * s, `icon_${sid}`).setDisplaySize(30 * s, 30 * s);
         this.root.add(icon);
       });
-      const btn = new Button(this, x, y + 134 * s, colW - 90 * s, 30 * s, selected ? '已选择' : '选择此英雄', () => {
+      const btn = new Button(this, x, y + 154 * s, colW - 90 * s, 30 * s, selected ? '已选择' : '选择此英雄', () => {
         this.selectedHero = id;
         save.current.hero.id = id;
         save.save();
@@ -296,7 +316,7 @@ export class MenuScene extends Phaser.Scene {
     });
 
     // ── divider ──────────────────────────────────────────────────
-    const dividerY = panelY + 208 * s;
+    const dividerY = panelY + 236 * s;
     this.g.lineStyle(1, PAL.uiBorder, 0.7);
     this.g.lineBetween(panelX + 20 * s, dividerY, panelX + panelW - 20 * s, dividerY);
 
@@ -334,15 +354,20 @@ export class MenuScene extends Phaser.Scene {
 
     // ── column 2: inventory ──────────────────────────────────────
     this.addText(colX[1], top, `背包（${sheet.inventory.length} 件）`, 15, toCss(PAL.uiGold), [0, 0.5], true);
+    let invY = top + 32 * s;
     if (sheet.inventory.length === 0) {
-      this.addText(colX[1], top + 34 * s, '还没有战利品。通关会掉落装备（星级与 Boss 影响数量与品质）。', 12, toCss(PAL.uiDim), [0, 0.5]);
+      const note = this.addText(colX[1], invY, biLines('还没有战利品。通关会掉落装备（星级与 Boss 影响数量与品质）。'), 11, toCss(PAL.uiDim), [0, 0]);
+      note.setWordWrapWidth(colW - 24 * s, true);
+      invY += note.height + 10 * s;
     }
     sheet.inventory.slice(0, 9).forEach((item, i) => {
-      const y = top + 30 * s + i * 32 * s;
+      const y = invY + i * 34 * s;
       const equipped = (save.current.hero.equipment ?? {})[item.slot] === item.id;
-      this.addText(colX[1], y, `${item.name}`, 12, this.rarityColor(item.rarity), [0, 0.5]);
-      this.addText(colX[1] + 92 * s, y, this.itemStatsText(item), 11, toCss(PAL.uiDim), [0, 0.5]);
-      const b = new Button(this, colX[1] + colW - 34 * s, y, 62 * s, 26 * s, equipped ? '已装备' : '装备', () => {
+      const n = this.addText(colX[1], y, biLines(item.name), 11, this.rarityColor(item.rarity), [0, 0]);
+      n.setWordWrapWidth(colW - 90 * s, true);
+      const st = this.addText(colX[1], y + n.height + 1 * s, biLines(this.itemStatsText(item)), 9, toCss(PAL.uiDim), [0, 0]);
+      st.setWordWrapWidth(colW - 90 * s, true);
+      const b = new Button(this, colX[1] + colW - 34 * s, y + 12 * s, 62 * s, 26 * s, equipped ? '已装备' : '装备', () => {
         equipFromInventory(save.current, item.id);
         save.save();
         this.render();
@@ -353,32 +378,40 @@ export class MenuScene extends Phaser.Scene {
 
     // ── column 3: talents + relics ───────────────────────────────
     this.addText(colX[2], top, `天赋（剩余 ${save.current.hero.talentPoints} 点）`, 15, toCss(PAL.uiGold), [0, 0.5], true);
-    TALENTS.forEach((t, i) => {
-      const y = top + 30 * s + i * 30 * s;
+    // Talents are a stacked pair of lines per row: the name line and its effect line are both
+    // bilingual, so putting them side by side (as before) made them run through each other.
+    let talentY = top + 30 * s;
+    TALENTS.forEach((t) => {
+      const y = talentY;
       const rank = save.current.hero.talents?.[t.id] ?? 0;
       const maxed = rank >= t.maxRank;
-      this.addText(
+      const nameT = this.addText(
         colX[2],
         y,
-        `${TALENT_BRANCH_LABEL[t.branch]}·${t.name} ${rank}/${t.maxRank}`,
-        12,
+        biLines(`${TALENT_BRANCH_LABEL[t.branch]}·${t.name} ${rank}/${t.maxRank}`),
+        11,
         rank > 0 ? toCss(0x9fffb0) : toCss(PAL.uiText),
-        [0, 0.5],
+        [0, 0],
       );
-      this.addText(colX[2] + 150 * s, y, t.desc, 11, toCss(PAL.uiDim), [0, 0.5]);
-      const b = new Button(this, colX[2] + colW - 24 * s, y, 34 * s, 24 * s, '+', () => {
+      nameT.setWordWrapWidth(colW - 40 * s, true);
+      const descT = this.addText(colX[2], y + nameT.height + 1 * s, biLines(t.desc), 9, toCss(PAL.uiDim), [0, 0]);
+      descT.setWordWrapWidth(colW - 40 * s, true);
+      talentY += nameT.height + descT.height + 10 * s;
+      const b = new Button(this, colX[2] + colW - 24 * s, y + 8 * s, 32 * s, 22 * s, '+', () => {
         save.spendTalentPoint(t.id, t.maxRank);
         this.render();
       });
       b.setEnabled(!maxed && save.current.hero.talentPoints > 0);
       this.root.add([b.rect, b.label]);
     });
-    const relicTop = top + 30 * s + TALENTS.length * 30 * s + 18 * s;
+    const relicTop = talentY + 12 * s;
     this.addText(colX[2], relicTop, `遗物（${save.current.hero.relics.length}/${RELICS.length}）`, 15, toCss(PAL.uiGold), [0, 0.5], true);
-    RELICS.forEach((r, i) => {
+    let relicY = relicTop + 24 * s;
+    RELICS.forEach((r) => {
       const owned = save.current.hero.relics.includes(r.id);
-      const y = relicTop + 26 * s + i * 20 * s;
-      this.addText(colX[2], y, `${owned ? '✔' : '○'} ${r.name} — ${r.desc}`, 11, toCss(owned ? 0x9fffb0 : PAL.uiDim), [0, 0.5]);
+      const t = this.addText(colX[2], relicY, biLines(`${owned ? '✔' : '○'} ${r.name} — ${r.desc}`), 10, toCss(owned ? 0x9fffb0 : PAL.uiDim), [0, 0]);
+      t.setWordWrapWidth(colW - 40 * s, true);
+      relicY += t.height + 6 * s;
     });
 
     this.addButton(this.W / 2, panelY + panelH + 26 * s, 240 * s, 38 * s, '返回', () => {
@@ -453,14 +486,17 @@ export class MenuScene extends Phaser.Scene {
       refresh();
     });
     y += 56 * s;
-    this.addText(panelX + 30 * s, y, '存档保存在浏览器 LocalStorage（战役进度 / 英雄等级 / 装备 / 天赋 / 遗物 / 设置）。', 12, toCss(PAL.uiDim), [0, 0.5]);
-    y += 34 * s;
-    this.addButton(panelX + panelW / 2 - 150 * s, y, 280 * s, 34 * s, '退还全部天赋点（不损失进度）', () => {
+    // The save note is a bilingual block (two lines), so the buttons below it need room: with the
+    // old 34px step the "refund talents" button was drawn straight through the English line.
+    const note = this.addText(panelX + 30 * s, y, biLines('存档保存在浏览器 LocalStorage（战役进度 / 英雄等级 / 装备 / 天赋 / 遗物 / 设置）。'), 11, toCss(PAL.uiDim), [0, 0]);
+    note.setWordWrapWidth(panelW - 60 * s, true);
+    y += note.height + 26 * s;
+    this.addButton(panelX + panelW / 2 - 150 * s, y, 300 * s, 34 * s, '退还全部天赋点（不损失进度）', () => {
       save.respecTalents();
       this.render();
     });
-    y += 44 * s;
-    this.addButton(panelX + panelW / 2, y, 260 * s, 34 * s, '清空存档并重置', () => {
+    y += 56 * s;
+    this.addButton(panelX + panelW / 2, y, 280 * s, 34 * s, '清空存档并重置', () => {
       save.reset();
       audio.setVolumes(save.current.settings.music, save.current.settings.sfx, save.current.settings.muted);
       this.render();
@@ -511,26 +547,32 @@ export class MenuScene extends Phaser.Scene {
       ['最终 Boss', boss],
       ['本局随机祝福', '进入战场时随机获得 1 个（Roguelite）'],
     ];
+    // Each intel row is a LABEL line followed by a VALUE line. Both are bilingual now, so a
+    // "label left / value right" row would collide with itself, and a wrapped value would run into
+    // the next row: the advance is taken from the text that was actually rendered.
+    const infoW = panelW * 0.42;
     for (const [k, v] of lines) {
-      this.addText(infoX, iy, k, 12, toCss(PAL.uiDim), [0, 0.5], true);
-      const t = this.addText(infoX + 96 * s, iy, v, 13, toCss(PAL.uiText), [0, 0.5]);
-      t.setWordWrapWidth(panelW * 0.36);
-      iy += 26 * s;
+      const label = this.addText(infoX, iy, biAuto(k), 11, toCss(PAL.uiDim), [0, 0], true);
+      label.setWordWrapWidth(infoW, true);
+      const lineH = Math.max(label.height, 14 * s);
+      const t = this.addText(infoX, iy + lineH + 2 * s, v, 12, toCss(PAL.uiText), [0, 0]);
+      t.setWordWrapWidth(infoW, true);
+      iy += lineH + 4 * s + t.height + 8 * s;
     }
-    this.addText(infoX, iy + 8 * s, '任务简报', 12, toCss(PAL.uiDim), [0, 0.5], true);
-    const brief = this.addText(infoX, iy + 30 * s, m.brief, 13, toCss(PAL.uiText), [0, 0.5]);
-    brief.setWordWrapWidth(panelW * 0.4);
+    this.addText(infoX, iy + 6 * s, '任务简报', 12, toCss(PAL.uiDim), [0, 0], true);
+    const brief = this.addText(infoX, iy + 28 * s, m.brief, 12, toCss(PAL.uiText), [0, 0]);
+    brief.setWordWrapWidth(infoW, true);
     // objectives preview
     const objText = m.objectives
       .filter((o) => !o.hidden)
       .map((o) => biAuto(`${o.optional ? '·' : '▸'} ${o.text}`))
       .join('\n');
-    const objs = this.addText(infoX, iy + 76 * s, objText, 12, toCss(PAL.uiDim), [0, 0.5]);
-    objs.setWordWrapWidth(panelW * 0.4);
+    const objs = this.addText(infoX, iy + 28 * s + brief.height + 12 * s, objText, 11, toCss(PAL.uiDim), [0, 0]);
+    objs.setWordWrapWidth(infoW, true);
 
     // ── hero picker (right) ──
     const hx = panelX + panelW * 0.56;
-    this.addText(hx, panelY + 62 * s, '选择出征英雄', 13, toCss(PAL.uiGold), [0, 0.5], true);
+    this.addText(hx, panelY + 56 * s, '选择出征英雄', 12, toCss(PAL.uiGold), [0, 0.5], true);
     const level = save.getRecordFor ? save.getRecordFor(this.selectedHero).level : save.current.hero.level;
     const equipped = save.getRecordFor ? save.getRecordFor(this.selectedHero).equipment : save.current.hero.equipment;
     HERO_ORDER.forEach((id, i) => {
@@ -552,7 +594,17 @@ export class MenuScene extends Phaser.Scene {
         .filter(([, itemId]) => !!itemId)
         .map(([slot, itemId]) => `${slot}: ${ITEM_NAMES[itemId as string] ?? itemId}`)
         .slice(0, 3);
-      this.addText(hx + 92 * s, y + 26 * s, gear.length ? gear.join('　') : '未装备（战利品可在「英雄/装备」里装上）', 11, toCss(PAL.uiDim), [0, 0.5]);
+      // the "nothing equipped" hint is long in both languages and ran past the card border, so it
+      // is wrapped to the card's inner width
+      const gearText = this.addText(
+        hx + 92 * s,
+        y + 26 * s,
+        gear.length ? gear.join('　') : '未装备（战利品可在「英雄/装备」里装上）',
+        10,
+        toCss(PAL.uiDim),
+        [0, 0],
+      );
+      gearText.setWordWrapWidth(w - 104 * s, true);
       def.skills.forEach((sid, k) => {
         const icon = this.add.image(hx + 96 * s + k * 34 * s, y + 54 * s, `icon_${sid}`).setDisplaySize(26 * s, 26 * s);
         this.root.add(icon);

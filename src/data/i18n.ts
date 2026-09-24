@@ -432,10 +432,10 @@ export const EN: Record<string, string> = {
   '资源不足，无法训练 ': 'Not enough resources to train ',
   '资源不足：': 'Not enough resources: ',
   '自动攻击范围内敌人。沿路造塔能极大减轻防守压力。': 'Automatically attacks enemies in range. Towers along the roads take the pressure off.',
-  '自动集结': 'Auto rally',
-  '自动进攻': 'Auto-attack',
-  '自动农民': 'Auto worker',
-  '自动生产': 'Auto production',
+  '自动集结': 'Rally',
+  '自动进攻': 'Attack',
+  '自动农民': 'Worker',
+  '自动生产': 'Production',
   '自然': 'Nature',
   '最后一战。巨龙不会被城墙挡住。': 'The last battle. A dragon is not stopped by walls.',
   '最终 Boss': 'Final boss',
@@ -618,10 +618,35 @@ export function hasEn(text: string): boolean {
   return en(text) !== '';
 }
 
+/**
+ * Words that are English but appear inside Chinese game copy ("Boss 现身", "Roguelite 遗物"), so
+ * their presence must NOT be read as "this string is already bilingual".
+ */
+const LATIN_IN_CHINESE = new Set(['boss', 'roguelite', 'aoe', 'hp', 'atk', 'arm', 'dps', 'xp', 'ai', 'npc', 'mvp', 'rts', 'ui', 'hud', 'ceo']);
+
+/**
+ * Already bilingual? Needed because labels pass through more than one layer (a Button caption is
+ * wrapped by the constructor, then again by setLabel/setText), and wrapping twice must be a no-op
+ * rather than appending the English a second time.
+ */
+export function looksBilingual(text: string): boolean {
+  if (!/[\u4e00-\u9fa5]/.test(text)) return false;
+  // normal words, ignoring the ones that legitimately sit inside Chinese copy
+  const words = text.match(/[A-Za-z]{2,}/g) ?? [];
+  if (words.some((w) => w.length >= 3 && !LATIN_IN_CHINESE.has(w.toLowerCase()))) return true;
+  // letter-spaced display type: "D A W N W A K E"
+  return /(?:\b[A-Za-z]\s+){3,}[A-Za-z]\b/.test(text);
+}
+
 /** "中文 · English" — labels and one-line UI. Multi-line input is handled per line. */
 export function bi(text: string, sep = ' · '): string {
   if (!text) return text;
+  if (looksBilingual(text)) return text; // already carries both languages: never append again
+  const whole = en(text);
   if (text.includes('\n')) {
+    // a multi-line block with its own entry (loading lore) is translated as a block: Chinese lines
+    // first, then the English block, instead of interleaving line by line
+    if (whole) return `${text}\n${whole}`;
     return text
       .split('\n')
       .map((line) => bi(line, sep))
@@ -631,19 +656,25 @@ export function bi(text: string, sep = ' · '): string {
   if (!e) return text;
   // idempotent: data records are often authored as "中文 English" already
   if (text.includes(e)) return text;
-  // symbols/numbers only, or an already-bilingual composite
-  if (/[\u4e00-\u9fa5]/.test(text) === false) return text;
-  if (/\b[A-Za-z]{3,}\b/.test(text) && /[\u4e00-\u9fa5]/.test(text)) return text;
+  // symbols/numbers only
+  if (!/[\u4e00-\u9fa5]/.test(text)) return text;
   return `${text}${sep}${e}`;
 }
 
 /** "中文\nEnglish" — panels and cards where a second line is affordable. */
 export function biLines(text: string): string {
   if (!text) return text;
-  if (text.includes('\n')) return bi(text, '\n');
-  const e = en(text);
-  if (!e || text.includes(e) || !/[\u4e00-\u9fa5]/.test(text)) return text;
-  return `${text}\n${e}`;
+  if (looksBilingual(text)) return text; // idempotent, same reason as bi()
+  const whole = en(text);
+  if (whole) return text.includes(whole) ? text : `${text}\n${whole}`;
+  if (text.includes('\n')) {
+    return text
+      .split('\n')
+      .map((line) => biLines(line))
+      .join('\n');
+  }
+  if (!/[\u4e00-\u9fa5]/.test(text)) return text;
+  return text;
 }
 
 /**
@@ -653,9 +684,12 @@ export function biLines(text: string): string {
  */
 export function biAuto(text: string): string {
   if (!text) return text;
-  // multi-line labels (HUD panels) are resolved line by line: a joined string rarely matches as a
-  // whole, but each of its lines does
+  if (looksBilingual(text)) return text; // idempotent: this is the entry point everything uses
   if (text.includes('\n')) {
+    // A multi-line block that has its own dictionary entry (the loading lore) is translated as a
+    // whole, keeping the two languages in separate blocks; otherwise it is a stack of independent
+    // labels (HUD panels) and each line is resolved on its own.
+    if (en(text)) return biLines(text);
     return text
       .split('\n')
       .map((l) => biAuto(l))

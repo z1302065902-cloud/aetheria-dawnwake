@@ -109,6 +109,16 @@ check(
   cjkValues.slice(0, 3).map(([k, v]) => `${k}=${v}`).join(' '),
 );
 
+// ── 1b. the HTML splash (shown before Phaser boots) ────────────────────────
+const splashHtml = readFileSync(`${ROOT}index.html`, 'utf8');
+const splashTexts = [...splashHtml.matchAll(/<(h1|p)[^>]*>([^<]+)<\/(h1|p)>/g)].map((m) => m[2].trim());
+const splashBad = splashTexts.filter((t) => /[\u4e00-\u9fa5]/.test(t) && !/[A-Za-z]/.test(t));
+check(
+  'bilingual/static: the pre-boot splash in index.html is bilingual',
+  splashBad.length === 0,
+  splashBad.length ? splashBad.join(' | ') : splashTexts.map((t) => t.slice(0, 28)).join(' · '),
+);
+
 // ── 2. runtime: nothing renders as Chinese-only ────────────────────────────
 const browser = await chromium.launch({
   channel: 'chromium',
@@ -118,10 +128,6 @@ const browser = await chromium.launch({
 const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
-await page.goto(TARGET, { waitUntil: 'load', timeout: 60000 });
-await page.waitForFunction(() => window.__AETHERIA__ && window.__AETHERIA__.scene.isActive('Menu'), null, { timeout: 30000 });
-await sleep(700);
-
 const collect = () =>
   page.evaluate(() => {
     const g = window.__AETHERIA__;
@@ -146,6 +152,30 @@ const cjkOnly = (t) =>
   /[\u4e00-\u9fa5]/.test(t) && !/[A-Za-z]/.test(t)
     ? t.replace(/\s+/g, ' ').slice(0, 44)
     : null;
+
+await page.goto(TARGET, { waitUntil: 'load', timeout: 60000 });
+
+// the loading / boot screen renders its own texts before the menu exists — inspect it while it is
+// on screen, because that is the very first thing a player reads
+const loadingMisses = [];
+for (let i = 0; i < 12; i++) {
+  const texts = await collect();
+  for (const t of texts) {
+    const bad = cjkOnly(t.text);
+    if (bad) loadingMisses.push(`${t.scene}: ${DUMP ? JSON.stringify(t.text) : bad}`);
+  }
+  const done = await page.evaluate(() => window.__AETHERIA__ && window.__AETHERIA__.scene.isActive('Menu'));
+  if (done) break;
+  await sleep(180);
+}
+check(
+  'bilingual/runtime: the boot / loading screen is bilingual',
+  loadingMisses.length === 0,
+  loadingMisses.length ? `${loadingMisses.length} Chinese-only — ${[...new Set(loadingMisses)].slice(0, 5).join(' | ')}` : 'loading screen clean',
+);
+
+await page.waitForFunction(() => window.__AETHERIA__ && window.__AETHERIA__.scene.isActive('Menu'), null, { timeout: 30000 });
+await sleep(700);
 
 // menu screens
 const menuScreens = ['main', 'campaign', 'heroes', 'settings', 'deploy'];
@@ -235,6 +265,157 @@ check(
   'bilingual/runtime: the battle HUD is bilingual including dynamic lines (feed, counters, orders)',
   inBattle.length === 0,
   inBattle.length ? `${inBattle.length} Chinese-only lines${DUMP ? '\n  ' + [...new Set(inBattle)].join('\n  ') : ' — ' + inBattle.slice(0, 6).join(' | ')}` : 'all HUD text carries English',
+);
+
+// ── 3. the two visual defects a "contains both languages" check cannot see ──
+// (a) the English must not be appended twice — labels pass through several layers
+const dumpTexts = async () => {
+  const scenes = ['Menu', 'Hud'];
+  const out = [];
+  for (const sc of scenes) {
+    const t = await page.evaluate((key) => {
+      const s = window.__AETHERIA__.scene.getScene(key);
+      const res = [];
+      const visit = (list, parentVisible) => {
+        for (const o of list ?? []) {
+          const vis = parentVisible && o.visible !== false;
+          if (o.type === 'Text' && o.text && vis) res.push(o.text);
+          if (o.list) visit(o.list, vis);
+        }
+      };
+      if (s && s.scene.isActive()) visit(s.children.list, true);
+      return res;
+    }, sc);
+    out.push(...t);
+  }
+  return out;
+};
+const doubled = [];
+for (const t of await dumpTexts()) {
+  for (const m of t.matchAll(/[A-Za-z][A-Za-z ,'’\/\-]{9,}/g)) {
+    const phrase = m[0].trim();
+    if (phrase.length >= 12 && t.split(phrase).length > 2) {
+      doubled.push(`${JSON.stringify(phrase.slice(0, 34))} ×${t.split(phrase).length - 1} in ${JSON.stringify(t.slice(0, 46))}`);
+      break;
+    }
+  }
+}
+check(
+  'bilingual/runtime: no label carries its English translation twice',
+  doubled.length === 0,
+  doubled.length ? [...new Set(doubled)].slice(0, 3).join(' | ') : 'no duplicated translations',
+);
+
+// (b) two bilingual blocks must not be drawn on top of each other: the English half of a block
+//     needs vertical room, and several panels were laid out for single-line text
+const layoutAudit = () =>
+  page.evaluate(() => {
+  const bad = [];
+  for (const key of ['Menu', 'Hud']) {
+    const scene = window.__AETHERIA__.scene.getScene(key);
+    if (!scene || !scene.scene.isActive()) continue;
+    const texts = [];
+    const visit = (list, parentVisible) => {
+      for (const o of list ?? []) {
+        // a hidden overlay still has its children parked at (0,0); those are not collisions
+        const vis = parentVisible && o.visible !== false;
+        if (o.type === 'Text' && o.text && o.text.trim() && vis && o.alpha > 0.05) {
+          const b = o.getBounds();
+          texts.push({ t: o.text.replace(/\s+/g, ' ').slice(0, 30), x1: b.x, y1: b.y, x2: b.right, y2: b.bottom });
+        }
+        if (o.list) visit(o.list, vis);
+      }
+    };
+    visit(scene.children.list, true);
+    for (let i = 0; i < texts.length; i++) {
+      for (let j = i + 1; j < texts.length; j++) {
+        const a = texts[i];
+        const c = texts[j];
+        const ox = Math.min(a.x2, c.x2) - Math.max(a.x1, c.x1);
+        const oy = Math.min(a.y2, c.y2) - Math.max(a.y1, c.y1);
+        // ignore the deliberate pair "Chinese line / English line" of one block; flag real collisions
+        const sameBlock = a.t.includes(c.t.slice(0, 4)) || c.t.includes(a.t.slice(0, 4));
+        if (ox > 6 && oy > 5 && !sameBlock) {
+          bad.push(`${key}: ${JSON.stringify(a.t)} ⨯ ${JSON.stringify(c.t)} (${Math.round(ox)}×${Math.round(oy)}px)`);
+        }
+      }
+    }
+  }
+  return bad;
+  });
+
+// The deploy / heroes / campaign screens are the most text-dense surfaces in the game, so the
+// layout audit runs on each of them as well (a jumbled intel column shipped once already).
+const menuLayout = [];
+for (const screen of menuScreens) {
+  await page.evaluate((s) => {
+    const m = window.__AETHERIA__.scene.getScene('Menu');
+    m.screen = s;
+    m.pendingMission = 'm04';
+    m.render();
+  }, screen);
+  await sleep(260);
+  const bad = await layoutAudit();
+  for (const b of bad) menuLayout.push(`${screen} → ${b}`);
+}
+check(
+  'bilingual/runtime: no text collisions on any menu screen (deploy / heroes / campaign / settings)',
+  menuLayout.length === 0,
+  menuLayout.length ? `${menuLayout.length} collisions — ${[...new Set(menuLayout)].slice(0, 4).join(' | ')}` : `${menuScreens.length} screens clean`,
+);
+
+const overlap = await layoutAudit();
+check(
+  'bilingual/runtime: bilingual blocks do not overlap each other',
+  overlap.length === 0,
+  overlap.length ? [...new Set(overlap)].slice(0, 3).join(' | ') : 'no overlapping text blocks',
+);
+
+// (c) a caption must fit inside its own control, and text must not be drawn over another control's
+//     plate — the failure mode that made the menu buttons and the army rows read as broken
+const fitting = await page.evaluate(() => {
+  const bad = [];
+  const scenes = ['Menu', 'Hud'];
+  for (const key of scenes) {
+    const scene = window.__AETHERIA__.scene.getScene(key);
+    if (!scene || !scene.scene.isActive()) continue;
+    const texts = [];
+    const rects = [];
+    const visit = (list, vis) => {
+      for (const o of list ?? []) {
+        const v = vis && o.visible !== false;
+        if (!v || o.alpha <= 0.05) continue;
+        if (o.type === 'Text' && o.text && o.text.trim()) {
+          const b = o.getBounds();
+          texts.push({ t: o.text.replace(/\s+/g, ' ').slice(0, 34), b, o });
+        } else if (o.type === 'Rectangle' && o.width > 4 && o.height > 4) {
+          const b = o.getBounds();
+          rects.push({ b, o });
+        }
+        if (o.list) visit(o.list, v);
+      }
+    };
+    visit(scene.children.list, true);
+    for (const t of texts) {
+      for (const r of rects) {
+        const inside = t.b.x >= r.b.x - 1 && t.b.right <= r.b.right + 1 && t.b.y >= r.b.y - 1 && t.b.bottom <= r.b.bottom + 1;
+        const isOwnLabel = r.o.parentContainer && r.o.parentContainer === t.o.parentContainer;
+        if (isOwnLabel) continue; // a Button's caption belongs to that plate
+        const ox = Math.min(t.b.right, r.b.right) - Math.max(t.b.x, r.b.x);
+        const oy = Math.min(t.b.bottom, r.b.bottom) - Math.max(t.b.y, r.b.y);
+        // 'partially inside' means the caption is wider/taller than the plate it sits on
+        if (ox > 3 && oy > 3 && !inside) {
+          bad.push(`${key}: ${JSON.stringify(t.t)} spills over a ${Math.round(r.b.width)}x${Math.round(r.b.height)} plate`);
+        }
+      }
+    }
+  }
+  return bad;
+});
+check(
+  'bilingual/runtime: captions fit inside their controls (no overflow onto neighbouring plates)',
+  fitting.length === 0,
+  fitting.length ? [...new Set(fitting)].slice(0, 4).join(' | ') : 'every caption fits its control',
 );
 
 check('bilingual: no runtime errors while checking', errors.length === 0, errors.slice(0, 2).join(' | '));

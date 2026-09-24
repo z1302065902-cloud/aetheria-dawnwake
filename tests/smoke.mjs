@@ -591,7 +591,9 @@ const equipBtn = await page.evaluate(() => {
   // the "装备" button that sits on the same row as the legendary weapon
   const label = out.find((o) => o.type === 'Text' && o.text.startsWith('破潮之矛'));
   if (!label) return null;
-  const btn = out.find((o) => o.type === 'Text' && o.text.startsWith('装备') && Math.abs(o.y - label.y) < 6 && o.visible);
+  // the inventory row is now two lines tall (bilingual name + stats) and its button sits on the
+  // row's centre, so match within the row band rather than within 6px
+  const btn = out.find((o) => o.type === 'Text' && o.text.startsWith('装备') && Math.abs(o.y - label.y) < 22 && o.visible);
   return btn ? { x: btn.x, y: btn.y, item: label.text } : { row: label.y };
 });
 check('equipment: the inventory row for the legendary weapon is rendered', !!equipBtn && !!equipBtn.x, JSON.stringify(equipBtn));
@@ -667,7 +669,9 @@ const plusBtn = await page.evaluate(() => {
   rec(menu.children.list);
   const row = out.find((o) => o.type === 'Text' && o.text.includes('烈焰精研'));
   if (!row) return null;
-  const btn = out.find((o) => o.type === 'Text' && o.text === '+' && Math.abs(o.y - row.y) < 4 && o.visible);
+  // a talent row is now two lines tall (bilingual name + effect), and its + button is centred on
+  // the row's first line: match within the row band instead of within 4px
+  const btn = out.find((o) => o.type === 'Text' && o.text === '+' && Math.abs(o.y - row.y) < 20 && o.visible);
   return btn ? { x: btn.x, y: btn.y } : { row: row.text };
 });
 check('talents: the 烈焰精研 talent row has a + button', !!plusBtn && !!plusBtn.x, JSON.stringify(plusBtn));

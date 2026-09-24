@@ -116,9 +116,14 @@ export class Button {
     return !!this.rect.scene && !!this.label.scene;
   }
 
-  setLabel(s: string): this {
+  /**
+   * Replace the caption. `raw` skips the automatic bilingual wrapping: the cramped HUD controls
+   * (stance / automation tiles) pass their own two-line bilingual text, because the inline form is
+   * wider than the button itself.
+   */
+  setLabel(s: string, raw = false): this {
     if (!this.label.scene) return this;
-    this.label.setText(biAuto(s));
+    this.label.setText(raw ? s : biAuto(s));
     return this;
   }
 

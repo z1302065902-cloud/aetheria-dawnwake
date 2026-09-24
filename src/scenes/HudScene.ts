@@ -12,7 +12,7 @@ import { RESOURCE_COLOR, type ResourceId } from '../config/Constants';
 import { save } from '../core/SaveManager';
 import type { BattleScene, HudState } from '../scenes/BattleScene';
 import type { MatchResult } from '../systems/Mission';
-import { biAuto } from '../data/i18n';
+import { biAuto, biLines, en } from '../data/i18n';
 
 interface UnitCard {
   bg: Phaser.GameObjects.Rectangle;
@@ -45,6 +45,8 @@ export class HudScene extends Phaser.Scene {
   private minimapZone!: Phaser.GameObjects.Rectangle;
 
   private heroName!: Phaser.GameObjects.Text;
+  /** English half of the hero name: the bilingual name cannot fit beside the level text */
+  private heroNameEn!: Phaser.GameObjects.Text;
   private heroLevel!: Phaser.GameObjects.Text;
   private heroPortrait!: Phaser.GameObjects.Image;
   private heroHp!: Bar;
@@ -155,7 +157,8 @@ export class HudScene extends Phaser.Scene {
 
     // hero panel
     this.heroPortrait = this.add.image(0, 0, 'u_knightCommander').setOrigin(0.5, 0.62);
-    this.heroName = text(this, 0, 0, '', 15, toCss(PAL.uiGold), { bold: true });
+    this.heroName = text(this, 0, 0, '', 15, toCss(PAL.uiGold), { bold: true, raw: true });
+    this.heroNameEn = text(this, 0, 0, '', 10, toCss(PAL.uiDim), { raw: true });
     this.heroLevel = text(this, 0, 0, '', 13, toCss(PAL.uiText), { origin: [1, 0.5] });
     this.heroHp = new Bar(this, 0, 0, 100, 9, PAL.hp);
     this.heroMana = new Bar(this, 0, 0, 100, 7, PAL.mana);
@@ -174,7 +177,7 @@ export class HudScene extends Phaser.Scene {
       this.abilityButtons.push(btn);
       const icon = this.add.image(0, 0, 'icon_shieldCharge').setDisplaySize(48, 48);
       this.abilityIcons.push(icon);
-      this.abilityCosts.push(text(this, 0, 0, '', 11, toCss(PAL.mana), { origin: [0.5, 0.5], bold: true }));
+      this.abilityCosts.push(text(this, 0, 0, '', 9, toCss(PAL.mana), { origin: [0.5, 0], bold: true }));
     }
 
     // selection panel
@@ -182,7 +185,7 @@ export class HudScene extends Phaser.Scene {
     for (let i = 0; i < 12; i++) {
       const bg = this.add.rectangle(0, 0, 54, 46, 0x1b2440, 0.9).setStrokeStyle(1, PAL.uiBorder, 0.7);
       const bar = new Bar(this, 0, 0, 46, 4, PAL.hp);
-      const label = text(this, 0, 0, '', 10, toCss(PAL.uiText), { origin: [0.5, 0.5] });
+      const label = text(this, 0, 0, '', 8, toCss(PAL.uiText), { origin: [0.5, 0.5] });
       this.unitCards.push({ bg, bar, label });
     }
     for (let i = 0; i < 6; i++) {
@@ -341,15 +344,18 @@ export class HudScene extends Phaser.Scene {
     this.hintText.setPosition(this.W / 2, topH + 12 * s).setFontSize(11 * s);
 
     // ---- objectives panel (top right) ----
-    const objW = 286 * s;
+    const objW = Math.min(360 * s, this.W * 0.34);
     const objX = this.W - objW - 10 * s;
     const objY = topH + 26 * s;
     this.objectivePanelHeight = 34 * s + this.objectiveTexts.length * 20 * s * 0.5 + 10 * s;
     drawPanel(g, objX, objY, objW, 26 * s + 9 * 20 * s, { header: true, alpha: 0.86 });
     for (let i = 0; i < this.objectiveTexts.length; i++) {
-      this.objectiveTexts[i].setPosition(objX + 12 * s, objY + 30 * s + i * 19 * s).setFontSize(12 * s);
+      this.objectiveTexts[i]
+        .setPosition(objX + 12 * s, objY + 26 * s + i * 26 * s)
+        .setFontSize(9 * s)
+        .setWordWrapWidth(objW - 24 * s, true);
     }
-    this.objectivePanelHeight = 26 * s + 9 * 19 * s;
+    this.objectivePanelHeight = 26 * s + 9 * 26 * s;
 
     // ---- bottom strip - (everything is proportionally capped against the real
     // viewport so a narrow window shrinks the panels instead of overlapping them) ----
@@ -384,7 +390,8 @@ export class HudScene extends Phaser.Scene {
     drawPanel(g, hpX, hpY, hpW, hpH, { alpha: 0.9 });
     const portraitScale = Math.min(1.05 * s, hpW / 280);
     this.heroPortrait.setPosition(hpX + 40 * s, hpY + hpH * 0.56).setScale(portraitScale);
-    this.heroName.setPosition(hpX + 96 * s, hpY + 16 * s).setFontSize(15 * s);
+    this.heroName.setPosition(hpX + 96 * s, hpY + 14 * s).setFontSize(15 * s);
+    this.heroNameEn.setPosition(hpX + 96 * s, hpY + 31 * s).setFontSize(10 * s);
     this.heroLevel.setPosition(hpX + hpW - 10 * s, hpY + 16 * s).setFontSize(13 * s);
     const barX = hpX + 96 * s;
     const barW = Math.max(30 * s, hpW - 108 * s);
@@ -417,7 +424,9 @@ export class HudScene extends Phaser.Scene {
       this.abilityButtons[i].setSize(abBtn, abBtn);
       this.abilityButtons[i].rect.setSize(abBtn, abBtn);
       this.abilityIcons[i].setPosition(bx, by).setDisplaySize(abBtn * 0.82, abBtn * 0.82);
-      this.abilityCosts[i].setPosition(bx, by + abBtn * 0.68).setFontSize(11 * s);
+      // two stacked lines: the inline bilingual form is wider than the tile pitch and would
+      // overlap the neighbouring tile
+      this.abilityCosts[i].setPosition(bx, by + abBtn * 0.62).setFontSize(9 * s);
       this.rect(`abilityBtn${i}`, bx - abBtn / 2, by - abBtn / 2, abBtn, abBtn);
     }
     this.rect('abilityPanel', abX, abY, abW, hpH);
@@ -428,10 +437,10 @@ export class HudScene extends Phaser.Scene {
     drawPanel(g, cmdX, abY, cmdW, hpH, { alpha: 0.9 });
     this.rect('commandPanel', cmdX, abY, cmdW, hpH);
     this.rect('topStrip', 0, 0, this.W, topH);
-    this.rect('objectives', objX, objY, objW, 26 * s + 9 * 19 * s);
+    this.rect('objectives', objX, objY, objW, 26 * s + 9 * 26 * s);
     this.rect('bottomStrip', 0, bottomY, this.W, bottomH);
-    this.selectionTitle.setPosition(cmdX + 10 * s, abY + 14 * s).setFontSize(13 * s);
-    const cardW = 56 * s;
+    this.selectionTitle.setPosition(cmdX + 10 * s, abY + 14 * s).setFontSize(12 * s).setWordWrapWidth(cmdW - 24 * s, true);
+    const cardW = 84 * s;
     for (let i = 0; i < this.unitCards.length; i++) {
       const cx = cmdX + 12 * s + i * (cardW + 4 * s);
       const cyy = abY + 34 * s;
@@ -442,7 +451,9 @@ export class HudScene extends Phaser.Scene {
       card.bar.y = cyy + 42 * s;
       card.bar.w = cardW - 14 * s;
       card.bar.h = 4 * s;
-      card.label.setPosition(cx + cardW / 2 - 6 * s, cyy + 20 * s).setFontSize(10 * s);
+      // two stacked lines at a small size: "骑士指挥官 / Knight Commander" does not fit one line
+      // inside a unit card
+      card.label.setPosition(cx + cardW / 2 - 6 * s, cyy + 18 * s).setFontSize(8 * s);
     }
     for (let i = 0; i < this.buildButtons.length; i++) {
       const bx = cmdX + 14 * s + (i % 6) * 112 * s;
@@ -463,7 +474,7 @@ export class HudScene extends Phaser.Scene {
     // ── single-player panel layout ──
     const spW = Math.min(252 * s, this.W * 0.24);
     const spX = 8 * s;
-    const spH = 176 * s;
+    const spH = 232 * s;
     const spY = bottomY - spH - 10 * s;
     drawPanel(g, spX, spY, spW, spH, { header: true, alpha: 0.88 });
     this.workerText.setPosition(spX + 8 * s, spY + 34 * s).setFontSize(12 * s);
@@ -477,19 +488,32 @@ export class HudScene extends Phaser.Scene {
     }
     for (let i = 0; i < this.armyTexts.length; i++) {
       const y = spY + 84 * s + i * 26 * s;
-      this.armyTexts[i].setPosition(spX + 8 * s, y).setFontSize(12 * s);
+      // compact single line with a short English form: the panel has no vertical room for a second
+      // line per row (3 rows + 4 automation toggles in 176px)
+      this.armyTexts[i].setPosition(spX + 8 * s, y).setFontSize(8 * s);
       this.armyButtons[i * 2].btn.setPosition(spX + spW - 78 * s, y).setSize(92 * s, 20 * s);
       this.armyButtons[i * 2].btn.label.setFontSize(11 * s);
       this.armyButtons[i * 2 + 1].btn.setPosition(spX + spW - 20 * s, y).setSize(24 * s, 20 * s);
       this.armyButtons[i * 2 + 1].btn.label.setFontSize(11 * s);
     }
+    // one row of four compact toggles, each with a stacked two-line bilingual caption: a 2x2 block
+    // needed vertical space the panel does not have (the army rows sit directly above)
+    const autoTileW = Math.min(58 * s, (spW - 20 * s) / 4 - 4 * s);
+    const autoStep = (spW - 16 * s) / 4;
     for (let i = 0; i < this.autoButtons.length; i++) {
-      const bx = spX + 8 * s + (i % 2) * 108 * s;
-      const by = spY + spH - 46 * s + Math.floor(i / 2) * 22 * s;
-      this.autoButtons[i].btn.setPosition(bx + 42 * s, by).setSize(84 * s, 20 * s);
-      this.autoButtons[i].btn.label.setFontSize(11 * s);
+      const bx = spX + 8 * s + autoStep * (i + 0.5);
+      const by = spY + spH - 58 * s;
+      this.autoButtons[i].btn.setPosition(bx, by).setSize(autoTileW, 20 * s);
+      this.autoButtons[i].btn.label.setFontSize(8 * s);
+      this.autoButtons[i].btn.rect.setSize(autoTileW, 20 * s);
     }
-    this.adventureText.setPosition(spX + 8 * s, spY + spH - 8 * s).setFontSize(11 * s);
+    // the adventure line is bilingual (two lines), so it needs room inside the panel rather than
+    // hanging over its bottom edge
+    this.adventureText
+      .setPosition(spX + 8 * s, spY + spH - 26 * s)
+      .setFontSize(9 * s)
+      // long bilingual lines wrap inside the panel instead of running off its edge
+      .setWordWrapWidth(spW - 18 * s, true);
 
     // boss bar: centred, above the objectives panel line
     const bossW = Math.min(560 * s, this.W * 0.46);
@@ -507,7 +531,7 @@ export class HudScene extends Phaser.Scene {
 
     // combat feed under the objectives panel
     const feedX = this.W - 14 * s;
-    const feedY = objY + 26 * s + 9 * 19 * s + 14 * s;
+    const feedY = objY + 26 * s + 9 * 26 * s + 14 * s;
     for (let i = 0; i < this.feedTexts.length; i++) {
       this.feedTexts[i].setPosition(feedX, feedY + i * 17 * s).setFontSize(12 * s);
     }
@@ -699,7 +723,10 @@ export class HudScene extends Phaser.Scene {
 
     // hero
     const h = st.hero;
-    this.heroName.setText(biAuto(`${h.name}　Lv.${h.level}`));
+    // Chinese name + level on one line, English name on the line below (the panel is not wide
+    // enough for "中文 Lv.N · English" without colliding with the level readout)
+    this.heroName.setText(`${h.name}　Lv.${h.level}`);
+    this.heroNameEn.setText(en(h.name));
     this.heroLevel.setText(biAuto(`HP ${Math.ceil(h.hp)}/${h.maxHp}`));
     this.heroHp.draw(h.maxHp ? h.hp / h.maxHp : 0);
     this.heroMana.draw(h.maxMana ? h.mana / h.maxMana : 0);
@@ -734,7 +761,7 @@ export class HudScene extends Phaser.Scene {
       btn.label.setPosition(btn.x - btn.w / 2 + 10 * s, btn.y - btn.h / 2 + 10 * s).setFontSize(12 * s);
       icon.setAlpha(ab.locked ? 0.28 : 1);
       const label = ab.locked ? `${ab.requiredLevel}级解锁` : ab.cooldownLeft > 0 ? `${Math.ceil(ab.cooldownLeft)}s` : `${ab.manaCost} 法力`;
-      this.abilityCosts[i].setText(biAuto(label));
+      this.abilityCosts[i].setText(biLines(label));
       this.abilityCosts[i].setColor(ab.locked ? toCss(PAL.uiDim) : ab.manaOk ? toCss(PAL.mana) : toCss(0xff7a6a));
       if (ab.cooldownLeft > 0) {
         const r = ab.cooldownLeft / Math.max(0.001, ab.cooldown);
@@ -761,7 +788,7 @@ export class HudScene extends Phaser.Scene {
       card.label.setVisible(show);
       card.bar.setVisible(show);
       if (show && u) {
-        card.label.setText(biAuto(u.name));
+        card.label.setText(biLines(u.name));
         card.bar.draw(u.hp, 0.6);
       }
     }
@@ -822,7 +849,8 @@ export class HudScene extends Phaser.Scene {
         }
         const mark = o.state === 'done' ? '✔' : o.state === 'failed' ? '✘' : o.state === 'active' ? '▶' : '·';
         const prog = o.total > 1 ? ` (${Math.floor(o.progress)}/${o.total})` : '';
-        t.setText(biAuto(`${mark} ${o.text}${prog}`));
+        // two lines (Chinese then English): the bilingual line is far wider than the panel
+        t.setText(biLines(`${mark} ${o.text}${prog}`));
         t.setColor(o.state === 'done' ? toCss(0x7dff9b) : o.state === 'failed' ? toCss(0xff7a6a) : o.optional ? toCss(0x9fb4dd) : toCss(PAL.uiText));
       }
     }
@@ -874,13 +902,16 @@ export class HudScene extends Phaser.Scene {
     this.workerText.setLineSpacing(4);
     for (let i = 0; i < this.armyTexts.length; i++) {
       const g = st.armies[i];
-      this.armyTexts[i].setText(biAuto(g ? `${g.id} ${g.name} ${g.count}` : ''));
+      this.armyTexts[i].setText(g ? biLines(`${g.id} ${g.name} ${g.count}`) : '');
       const stanceBtn = this.armyButtons[i * 2].btn;
-      stanceBtn.setLabel(g ? STANCE_LABEL[g.stance as Stance] ?? g.stance : '—');
+      // two lines: "自动进攻 / Auto-attack" does not fit the 92px button on one line
+      stanceBtn.setLabel(g ? biLines(STANCE_LABEL[g.stance as Stance] ?? g.stance) : '—', true);
+
     }
     for (const a of this.autoButtons) {
       const on = wk[a.key];
-      a.btn.setLabel(`${on ? '✔' : '✘'} ${a.label}`);
+      // two stacked lines: the inline bilingual form overflows the 84px toggle
+      a.btn.setLabel(biLines(`${on ? '✔' : '✘'} ${a.label}`), true);
       a.btn.setSubColor(on ? toCss(0x9fffb0) : toCss(PAL.uiDim));
     }
     this.adventureText.setText(biAuto(`冒险：已发现 ${st.adventure.found}　剩余 ${st.adventure.remaining}　${st.adventure.blessing}`));
