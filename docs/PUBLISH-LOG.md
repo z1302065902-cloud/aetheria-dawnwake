@@ -86,6 +86,25 @@
 
 ---
 
+---
+
+## 第二轮复查（网络部分恢复后）
+
+| 检查 | 方式 | 结果 |
+|---|---|---|
+| GitHub 推送 | `git push origin main` | ✅ 远端 `091349e`，本地/远端同步（此前 5 次超时是链路问题） |
+| Pages 最新提交 | `gh run list` | ✅ `success 091349e` —— 含 og 元信息的构建已上线 |
+| Pages 首页 / og.png | HTTPS | ✅ 200 / 200 |
+| **Vercel 部署状态** | `vercel ls`（走 api.vercel.com） | ✅ **两次生产部署均 `● Ready`**：`aetheria-dawnwake-bzi7cswb1`（39m，含 og 元信息）与 `aetheria-dawnwake-muqf7shv3`（2h） |
+| **Release 资产** | `gh release view --json assets`（走 api.github.com） | ✅ `aetheria-dawnwake-html5.zip` 436,472 bytes · **uploaded** |
+| Vercel 域名可达性 | HTTPS | ⛔ 本地 DNS 把 `vercel.app` 解析到 `156.233.67.243`、`aetheria-dawnwake.vercel.app` 解析到 `202.160.128.203`（**都不是 Vercel 的 IP**）→ 本地打不开，但 Vercel 侧 Ready（CLI 已确认） |
+| github.com / api.github.com | HTTPS | ✅ 200（此前一度 000，链路抖动） |
+| GitHub Release 页 HTML | HTTPS | ⛔ 000（`api.github.com` 的资产查询却是 uploaded → 页面 URL 走的是被干扰的路径） |
+| itch.io | HTTPS + DNS | ⛔ 仍 000；DNS 继续返回伪造 IP |
+
+**结论**：GitHub（仓库+Release）、GitHub Pages、Vercel **三者的服务端状态都已确认为正常/Ready**，
+本地对 vercel.app / github 部分 URL 的失败是**本机 DNS 污染与链路抖动**，不是发布失败。
+
 ## 待用户操作（仅两件）
 
 1. **连上 LetsVPN**（进程在跑但隧道没连）→ 说"继续"，我一趟做完 itch（建页 → 封面/截图 → butler 上传 → 设 Public → 验 200）。
