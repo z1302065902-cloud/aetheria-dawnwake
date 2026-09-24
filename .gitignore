@@ -6,3 +6,5 @@ dist-*/
 !artifacts/verification/*.log
 .DS_Store
 .vite/
+.vercel
+.env*

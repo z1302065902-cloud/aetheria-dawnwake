@@ -1,0 +1,15 @@
+import { chromium } from 'playwright';
+const b = await chromium.launch({ channel:'chromium', headless:true, args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--mute-audio'] });
+const p = await b.newPage({ viewport:{width:1280,height:800} });
+const errs=[]; p.on('pageerror',e=>errs.push(e.message)); p.on('console',m=>{ if(m.type()==='error') errs.push(m.text()); });
+await p.goto('https://z1302065902-cloud.github.io/aetheria-dawnwake/', { waitUntil:'load', timeout:60000 });
+await p.waitForFunction(()=>window.__AETHERIA__ && window.__AETHERIA__.scene.isActive('Menu'), null, {timeout:40000});
+const info = await p.evaluate(()=>({ title: document.title, scenes: window.__AETHERIA__.scene.getScenes(true).map(s=>s.scene.key) }));
+console.log('Pages 版 ✅', JSON.stringify(info));
+await p.evaluate(()=>window.__AETHERIA__.scene.getScene('Menu').scene.start('Battle',{missionId:'m01',heroId:'knightCommander'}));
+await p.waitForFunction(()=>!!window.__AETHERIA_BATTLE__, null, {timeout:30000});
+await new Promise(r=>setTimeout(r,3000));
+const combat = await p.evaluate(()=>({ fps: Math.round(window.__AETHERIA_BATTLE__.fps ?? 0), units: window.__AETHERIA_BATTLE__.world.units.length }));
+console.log('Pages 版战斗可跑 ✅', JSON.stringify(combat));
+console.log('页面报错:', errs.length ? errs.slice(0,3) : '无');
+await b.close();

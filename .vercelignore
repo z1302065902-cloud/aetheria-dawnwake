@@ -1,0 +1,10 @@
+# Vercel builds from source, so src/ and the config files must be uploaded. Only the heavy test
+# artifacts are excluded: the first attempt pushed 32MB and died mid-upload.
+artifacts/
+node_modules/
+.git/
+.github/
+coverage/
+.vercel/
+logs/
+*.log
