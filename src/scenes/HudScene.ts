@@ -8,6 +8,7 @@ import { FOG_TEX } from '../systems/Vision';
 import { STANCE_LABEL, type Stance } from '../systems/ArmyGroups';
 import { BUILDINGS } from '../data/buildings';
 import { getUnit } from '../data/units';
+import { RELICS } from '../data/items';
 import { RESOURCE_COLOR, type ResourceId } from '../config/Constants';
 import { save } from '../core/SaveManager';
 import type { BattleScene, HudState } from '../scenes/BattleScene';
@@ -567,13 +568,16 @@ export class HudScene extends Phaser.Scene {
     const rc = this.resultRoot.list as Phaser.GameObjects.GameObject[];
     const rbg = rc[0] as Phaser.GameObjects.Rectangle;
     rbg.setSize(this.W, this.H).setPosition(this.W / 2, this.H / 2);
-    this.resultTitle.setPosition(this.W / 2, this.H * 0.2).setFontSize(40 * s);
-    this.resultSub.setPosition(this.W / 2, this.H * 0.2 + 44 * s).setFontSize(17 * s);
-    this.resultBody.setPosition(this.W / 2, this.H * 0.46).setFontSize(15 * s);
-    this.resultStars.setPosition(this.W / 2, this.H * 0.38).setFontSize(34 * s);
+    // The result body is bilingual, so it is ~8 lines tall instead of 4: the vertical rhythm was
+    // re-planned so it cannot run into the star row or the buttons, and it wraps to a column width.
+    this.resultTitle.setPosition(this.W / 2, this.H * 0.15).setFontSize(38 * s);
+    this.resultSub.setPosition(this.W / 2, this.H * 0.15 + 40 * s).setFontSize(15 * s);
+    this.resultStars.setPosition(this.W / 2, this.H * 0.29).setFontSize(32 * s);
+    this.resultBody.setPosition(this.W / 2, this.H * 0.55).setFontSize(13 * s);
+    this.resultBody.setWordWrapWidth(Math.min(this.W * 0.72, 820 * s), true);
     this.resultButtons.forEach((b, i) => {
-      b.setPosition(this.W / 2 + (i - 0.5) * 200 * s, this.H * 0.76).setSize(180 * s, 42 * s);
-      b.label.setFontSize(15 * s);
+      b.setPosition(this.W / 2 + (i - 0.5) * 210 * s, this.H * 0.85).setSize(190 * s, 42 * s);
+      b.label.setFontSize(14 * s);
     });
   }
 
@@ -655,17 +659,21 @@ export class HudScene extends Phaser.Scene {
 
   private showResult(r: MatchResult & { missionName: string; parTime: number }): void {
     this.resultRoot.setVisible(true);
+    // the match is over: the live HUD panels (objective list, combat feed) are stale and the result
+    // overlay would otherwise be drawn straight through them
+    for (const t of this.objectiveTexts) t.setVisible(false);
+    for (const t of this.feedTexts) t.setVisible(false);
     this.resultTitle.setText(biAuto(r.victory ? '胜  利' : '战  败'));
     this.resultTitle.setColor(r.victory ? toCss(PAL.uiGold) : toCss(0xff6a5a));
     this.resultSub.setText(biAuto(`${r.missionName} · 用时 ${formatTime(r.seconds)} / 目标 ${formatTime(r.parTime)}`));
     this.resultStars.setText(biAuto(r.victory ? '★'.repeat(r.stars) + '☆'.repeat(3 - r.stars) : '☆☆☆'));
     const lines = [
       `完成任务：${r.objectivesDone}　可选完成：${r.optionalDone}　失败：${r.objectivesFailed}`,
-      `获得金币：${r.goldEarned}　英雄经验：${r.xpEarned}${r.relic ? `　遗物：${r.relic}` : ''}`,
+      `获得金币：${r.goldEarned}　英雄经验：${r.xpEarned}${r.relic ? `　遗物：${RELICS.find((x) => x.id === r.relic)?.name ?? r.relic}` : ''}`,
       r.loot && r.loot.length > 0 ? `战利品：${r.loot.join('、')}（可在「英雄 / 装备」里换上）` : '本局没有掉落装备',
       r.victory ? '进度已保存到本地存档。' : '提示：多造农庄提高人口，沿路造塔，让英雄带着部队推进。',
     ];
-    this.resultBody.setText(biAuto(lines.join('\n')));
+    this.resultBody.setText(lines.map((l) => biLines(l)).join('\n'));
     this.layoutOverlays();
   }
 
@@ -719,7 +727,10 @@ export class HudScene extends Phaser.Scene {
     const popColor = st.popUsed >= st.popMax ? toCss(0xff7a6a) : toCss(PAL.uiText);
     this.popText.setText(biAuto(`人口 ${st.popUsed}/${st.popMax}`)).setColor(popColor);
     this.timerText.setText(biAuto(formatTime(st.elapsed)));
-    this.waveText.setText(biAuto(`下一波进攻：${formatTime(st.wave.nextIn)}　第 ${st.wave.index} 波　FPS ${Math.round(st.fps)}`));
+    // a pending wave far in the future (or after the match ends) reads as a broken number, so the
+    // countdown is capped in the label
+    const nextIn = st.wave.nextIn > 3599 ? '—' : formatTime(st.wave.nextIn);
+    this.waveText.setText(biAuto(`下一波进攻：${nextIn}　第 ${st.wave.index} 波　FPS ${Math.round(st.fps)}`));
 
     // hero
     const h = st.hero;

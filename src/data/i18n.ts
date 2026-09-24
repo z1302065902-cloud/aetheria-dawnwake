@@ -18,6 +18,21 @@
 
 /** Static translations, keyed by the exact Chinese source string. */
 export const EN: Record<string, string> = {
+  // bare stat words: the HUD composes them with values ("魔法伤害 +10%"), so the words themselves
+  // must resolve for the numeric templates to apply
+  魔法伤害: 'Magic damage',
+  物理伤害: 'Physical damage',
+  采集速度: 'Gathering speed',
+  部队移动速度: 'Army movement speed',
+  移动速度: 'Movement speed',
+  近战单位生命: 'Melee unit HP',
+  建筑生命: 'Building HP',
+  英雄伤害: 'Hero damage',
+  技能冷却: 'Skill cooldown',
+  攻击力: 'Attack',
+  暴击率: 'Crit chance',
+  视野: 'Vision',
+  遗物加成: 'Relic bonus',
   光照: 'Lighting',
   建造: 'building',
   闲置: 'idle',
@@ -33,6 +48,9 @@ export const EN: Record<string, string> = {
   经验: 'XP',
   宝箱: 'Chest',
   重分配: 'to rebalance',
+  本局遗物加成: 'Relic bonuses this run',
+  视野外: 'out of sight',
+  阶段: 'Phase',
   自动重分配: 'auto-rebalanced',
   金币经验: 'gold / XP',
   声望: 'Renown',
@@ -523,6 +541,28 @@ export const EN_TPL: Array<[RegExp, string]> = [
   [/^(.+?)\s*被摧毁$/, '$1 destroyed'],
   [/^(\d+)[\s\u3000]+(主力军|远程军|英雄护卫)[\s\u3000]+(\d+)$/, '$1 $2 $3'],
   [/^([✔✘])\s*(.+)$/, '$1 $2'],
+  // objective rows in their DONE / FAILED state carry a ✔ / ✘ marker with a progress counter —
+  // only the active (▶) and pending (·) markers had templates, so finished objectives rendered
+  // Chinese-only in the finished panel
+  [/^([✔✘]) (.+?) \((\d+)\/(\d+)\)$/, '$1 $2 ($3/$4)'],
+  [/^([✔✘]) (.+)$/, '$1 $2'],
+  // boss bar
+  [/^(.+?)（视野外）$/, '$1 (out of sight)'],
+  [/^视野外$/, 'out of sight'],
+  [/^阶段 (\d+) \/ (\d+)$/, 'Phase $1 / $2'],
+  // result panel lines (composed from counters, so they need templates)
+  [/^完成任务：(\d+)[\s\u3000]*可选完成：(\d+)[\s\u3000]*失败：(\d+)$/, 'Main $1 · Optional $2 · Failed $3'],
+  [/^获得金币：(\d+)[\s\u3000]*英雄经验：(\d+)[\s\u3000]*遗物：(.+)$/, 'Gold $1 · Hero XP $2 · Relic $3'],
+  [/^获得金币：(\d+)[\s\u3000]*英雄经验：(\d+)$/, 'Gold $1 · Hero XP $2'],
+  [/^战利品：(.+?)（可在「英雄 \/ 装备」里换上）$/, 'Loot: $1 (equip it in Heroes / Equipment)'],
+  [/^战利品：(.+)$/, 'Loot: $1'],
+  [/^用时 ([\d:]+) \/ 目标 ([\d:]+)$/, 'Time $1 / target $2'],
+
+  // Generic "+N%" modifier lines ("魔法伤害 +10%"). Safe as a catch-all because the engine refuses
+  // a template whose captured group it cannot translate, so it only fires when the Chinese prefix
+  // is known.
+  [/^(.+?) \+(\d+(?:\.\d+)?)%$/, '$1 +$2%'],
+  [/^(.+?) \+(\d+(?:\.\d+)?)$/, '$1 +$2'],
   [/^(\d+)[\s\u3000]+金[\s\u3000]+(\d+)[\s\u3000]+木[\s\u3000]+(\d+)[\s\u3000]+晶$/, 'G$1 W$2 M$3'],
   [/^近战坦克[\s\u3000]+等级[\s\u3000]+(\d+)$/, 'Melee tank · level $1'],
   [/^远程输出[\s\u3000]+等级[\s\u3000]+(\d+)$/, 'Ranged damage · level $1'],
@@ -540,7 +580,7 @@ export const EN_TPL: Array<[RegExp, string]> = [
 ];
 
 /** Chinese→English lookups for the parts of a joined string (e.g. "名字 · 称号"). */
-const JOINERS = [' · ', ' — ', '　', ' / ', '：'];
+const JOINERS = [' · ', ' — ', '　', ' / ', '：', '、'];
 
 /**
  * Composite rule: a string joined from parts we can each translate ("骑士指挥官 · 黎明之盾") is
@@ -559,7 +599,11 @@ function enComposite(text: string, depth: number): string {
       if (!/[\u4e00-\u9fa5]/.test(t)) return t;
       return enDepth(t, depth + 1);
     });
-    if (done.every((d) => d !== '')) return done.join(j.trim() === '' ? ' ' : j);
+    if (done.every((d) => d !== '')) {
+      // English punctuation: the composite rule must not carry a full-width colon into English
+      const sep = j === '：' ? ': ' : j === '、' ? ', ' : j.trim() === '' ? ' ' : j;
+      return done.join(sep);
+    }
   }
   return '';
 }

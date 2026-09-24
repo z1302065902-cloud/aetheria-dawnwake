@@ -261,6 +261,98 @@ await page.evaluate(() => {
 });
 await sleep(300);
 
+// ── every remaining UI state inside a match ────────────────────────────────
+// The HUD shows different panels depending on what is selected and how the match ends. Sampling
+// only "a battle is running" once missed the completed-objective rows (✔ marker) and the boss
+// phase line, so each state is now inspected explicitly.
+const stateMisses = [];
+const sampleState = async (label) => {
+  const texts = await collect();
+  for (const t of texts) {
+    const bad = cjkOnly(t.text);
+    if (bad) stateMisses.push(`${label}: ${DUMP ? JSON.stringify(t.text) : bad}`);
+  }
+};
+await page.evaluate(() => {
+  const b = window.__AETHERIA_BATTLE__;
+  b.world.wallet.gold = 5000;
+  b.world.wallet.wood = 5000;
+  b.world.wallet.mana = 5000;
+  const w = b.world.units.find((u) => u.team === 1 && u.def.role === 'worker');
+  if (w) b.selection.setUnits([w]);
+});
+await sleep(700);
+await sampleState('worker selected (build buttons)');
+
+await page.evaluate(() => {
+  const b = window.__AETHERIA_BATTLE__;
+  const c = b.world.buildings.find((x) => x.team === 1 && x.def.id === 'castle');
+  if (c) b.selection.setBuilding(c);
+});
+await sleep(700);
+await sampleState('building selected (production queue)');
+
+await page.evaluate(() => {
+  const b = window.__AETHERIA_BATTLE__;
+  b.selection.setUnits(b.world.units.filter((u) => u.team === 1 && u.def.role !== 'worker').slice(0, 3));
+});
+await sleep(600);
+await sampleState('units selected (unit cards)');
+
+await page.evaluate(() => {
+  const b = window.__AETHERIA_BATTLE__;
+  b.pushFeed('发现 宝箱 1（+120 金 / +60 经验）', 'skill');
+  const h = window.__AETHERIA__.scene.getScene('Hud');
+  h.showBanner('巨兽现身', '镜头推近 · 准备迎战');
+  h.showToast('人口已满，先造农庄');
+});
+await sleep(900);
+await sampleState('combat feed + banner + toast');
+
+// finished match: the objectives panel switches to ✔ / ✘ markers and the boss bar shows a phase
+await page.evaluate(() => {
+  const b = window.__AETHERIA_BATTLE__;
+  for (const o of b.missions.objectives) {
+    o.state = 'done';
+    o.progress = o.def.total ?? 1;
+  }
+  b.ai.camps = [];
+  b.ai.nextWaveAt = 1e9;
+});
+// force the real end path (not just "all objectives met") and WAIT until the overlay is on screen:
+// sampling before the panel exists is how a Chinese-only result body slipped through once
+await page.evaluate(() => {
+  const b = window.__AETHERIA_BATTLE__;
+  if (!b.isEnded) {
+    b.finishMatch({ victory: true, objectivesDone: 5, optionalDone: 2, objectivesFailed: 0, gold: 420, xp: 190, stars: 3, seconds: 187, parTime: 1200, loot: ['破潮之矛', '守望板甲'], relic: 'flameRelic' });
+  }
+});
+await page.waitForFunction(
+  () => {
+    const h = window.__AETHERIA__.scene.getScene('Hud');
+    const root = h && h.resultRoot;
+    return !!root && root.visible && (root.list ?? []).some((o) => o.type === 'Text' && o.text && o.text.includes('进度已保存'));
+  },
+  null,
+  { timeout: 15000 },
+);
+await sleep(300);
+await sampleState('victory panel / result body');
+await page.evaluate(() => {
+  const b = window.__AETHERIA_BATTLE__;
+  const castle = b.world.buildings.find((x) => x.team === 1 && x.def.id === 'castle');
+  if (castle) castle.dead = true;
+  const boss = b.ai.boss;
+  if (boss) b.world.killUnit(boss, 1);
+});
+await sleep(1600);
+await sampleState('defeat panel');
+check(
+  'bilingual/runtime: every in-match UI state is bilingual (selection panels, feed, victory, defeat)',
+  stateMisses.length === 0,
+  stateMisses.length ? `${stateMisses.length} Chinese-only${DUMP ? '\n  ' + [...new Set(stateMisses)].join('\n  ') : ' — ' + [...new Set(stateMisses)].slice(0, 5).join(' | ')}` : 'all in-match states clean',
+);
+
 check(
   'bilingual/runtime: the battle HUD is bilingual including dynamic lines (feed, counters, orders)',
   inBattle.length === 0,
@@ -308,10 +400,10 @@ check(
 
 // (b) two bilingual blocks must not be drawn on top of each other: the English half of a block
 //     needs vertical room, and several panels were laid out for single-line text
-const layoutAudit = () =>
-  page.evaluate(() => {
+const layoutAudit = (scenes = ['Menu', 'Hud']) =>
+  page.evaluate((keys) => {
   const bad = [];
-  for (const key of ['Menu', 'Hud']) {
+  for (const key of keys) {
     const scene = window.__AETHERIA__.scene.getScene(key);
     if (!scene || !scene.scene.isActive()) continue;
     const texts = [];
@@ -342,7 +434,7 @@ const layoutAudit = () =>
     }
   }
   return bad;
-  });
+  }, scenes);
 
 // The deploy / heroes / campaign screens are the most text-dense surfaces in the game, so the
 // layout audit runs on each of them as well (a jumbled intel column shipped once already).
@@ -355,7 +447,9 @@ for (const screen of menuScreens) {
     m.render();
   }, screen);
   await sleep(260);
-  const bad = await layoutAudit();
+  // only the menu scene here: the battle HUD is audited separately, and its finished-match panel
+  // would otherwise be compared against the menu's own elements
+  const bad = await layoutAudit(['Menu']);
   for (const b of bad) menuLayout.push(`${screen} → ${b}`);
 }
 check(
