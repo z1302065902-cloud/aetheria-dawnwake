@@ -23,7 +23,7 @@ const built = await esbuild.build({
   platform: 'node',
 });
 const mod = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
-const { STYLE, FACTION, RANK, REGION, ELEMENT, SPECIAL, LIGHT, VFX, PROPORTIONS, UI, TYPE, ICON, CAMERA, ALL_COLORS } = mod;
+const { STYLE, FACTION, RANK, REGION, REGION_VFX, ELEMENT, SPECIAL, LIGHT, VFX, PROPORTIONS, UI, TYPE, ICON, CAMERA, ALL_COLORS } = mod;
 
 const hex = (n) => `#${n.toString(16).padStart(6, '0')}`;
 const row = (...cells) => `| ${cells.join(' | ')} |`;
@@ -86,6 +86,28 @@ ${Object.entries(RANK)
 ${Object.entries(REGION)
   .map(([k, r]) => row(`${r.name} (${k})`, hex(r.ground), hex(r.groundAlt), hex(r.stone), `${hex(r.ambient)} @${r.ambientAlpha}`, hex(r.fog), hex(r.accent)))
   .join('\n')}
+
+## 四b、区域 VFX（每个有两层粒子 + 命中残留色）
+
+| 区域 | 飘浮粒子 | alpha | 数量 | 第二层（萤火/余烬） | 命中烟色 | 地面残留 | 碎屑色 |
+|---|---|---|---|---|---|---|---|
+${Object.entries(REGION_VFX)
+  .map(([k, v]) =>
+    row(
+      k,
+      hex(v.mote.color),
+      v.mote.alpha,
+      `${v.mote.count}${v.spark ? ` + ${v.spark.count}` : ''}`,
+      v.spark ? `${hex(v.spark.color)} @${v.spark.alpha}（闪烁 ${v.spark.blink}s）` : '—',
+      hex(v.impact.smoke),
+      hex(v.impact.residue),
+      hex(v.impact.debris),
+    ),
+  )
+  .join('\n')}
+
+**规则**：萤火层只在 dusk / night 出现（白天看不见，所以不生成）；命中烟雾/残留色必须取当前区域，
+**不允许森林爆炸和石堡爆炸看起来一样**。
 
 ## 五、元素 / 技能色
 
@@ -188,12 +210,28 @@ ${Object.entries(LIGHT.timeOfDay)
 
 ## 十二、镜头语言
 
-| 场景 | 参数 |
-|---|---|
-| 主菜单 | 缩放 ${CAMERA.menu.zoom}，缓慢横移 ${CAMERA.menu.drift}，无震动 |
-| 战斗 | 默认 ${CAMERA.battle.zoomDefault}×，范围 ${CAMERA.battle.zoomMin}–${CAMERA.battle.zoomMax}×，跟随阻尼 ${CAMERA.battle.follow} |
-| 胜利 | 推近到 ${CAMERA.victory.zoom}×，${CAMERA.victory.panMs}ms 推镜后停 ${CAMERA.victory.holdMs}ms |
-| Boss 战 | 缩放 ${CAMERA.boss.zoom}×，震屏上限 ${CAMERA.boss.shakeCap}，击杀慢动作 ${CAMERA.boss.slowMotion}× |
+| 场景 | 参数 | 实现位置 |
+|---|---|---|
+| 主菜单 | 缩放 ${CAMERA.menu.zoom}，缓慢横移 ${CAMERA.menu.drift}（视差幅度 ±18px），**无震动** | \`MenuScene.update\` |
+| 战斗 | 默认 ${CAMERA.battle.zoomDefault}×，范围 ${CAMERA.battle.zoomMin}–${CAMERA.battle.zoomMax}×，跟随阻尼 ${CAMERA.battle.follow} | \`BattleScene.setupInput\` |
+| 胜利 | 推近到 ${CAMERA.victory.zoom}×，${CAMERA.victory.panMs}ms 推镜后停 ${CAMERA.victory.holdMs}ms | \`BattleScene.victoryCamera\` |
+| 失败 | 拉远到 0.9×（让损失读得出来），1200ms | \`missions.onResolved\` |
+| Boss 战 | 现身推近到 ${CAMERA.boss.zoom}×（${CAMERA.boss.panMs}ms 推 + ${CAMERA.boss.holdMs}ms 停），震屏上限 ${CAMERA.boss.shakeCap}，击杀慢动作 ${CAMERA.boss.slowMotion}× | \`BattleScene.bossIntroCamera\` |
+
+### 逐关昼夜分配
+
+| 关 | 时段 | 理由 |
+|---|---|---|
+| m01 | day | 教学关：光照中性，不靠氛围藏东西 |
+| m02 | dawn | 清晨护送 |
+| m03 | day | |
+| m04 | dusk | 暗影森林里找失踪骑士 |
+| m05 | day | |
+| m06 | dusk | 占领森林 |
+| m07 | day | |
+| m08 | night | 虚空族夜里现身 |
+| m09 | night | |
+| m10 | night | 虚空潮汐 |
 
 ## 附：全部允许色（${ALL_COLORS.length} 个）
 

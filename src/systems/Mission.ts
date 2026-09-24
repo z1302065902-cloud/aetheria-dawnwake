@@ -53,6 +53,8 @@ export class MissionSystem {
   onObjectiveDone: ((o: ObjectiveView) => void) | null = null;
   onObjectiveStart: ((o: ObjectiveView) => void) | null = null;
   onObjectiveRevealed: ((o: ObjectiveView) => void) | null = null;
+  /** fired once at resolve, with the verdict — used for the victory camera */
+  onResolved: ((victory: boolean) => void) | null = null;
   onEnd: ((result: MatchResult) => void) | null = null;
 
   private cacheTimer = 0;
@@ -350,6 +352,7 @@ export class MissionSystem {
   finish(victory: boolean): void {
     if (this.ended) return;
     this.ended = true;
+    this.onResolved?.(victory);
     this.victory = victory;
     this.defeat = !victory;
     const world = this.ctx.world;

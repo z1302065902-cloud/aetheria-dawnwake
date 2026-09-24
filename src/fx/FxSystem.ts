@@ -52,6 +52,11 @@ export interface FxSpawnOptions {
  * override a heavier one, so the screen does not vibrate during a big fight.
  */
 export class FxSystem {
+  /**
+   * Region impact palette (Visual Bible §4b): a forest hit must not leave the same grey dust as
+   * a stone fortress. Set by the battle scene from LightingSystem.
+   */
+  regionTint: { smoke: number; residue: number; debris: number } | null = null;
   private scene: Phaser.Scene;
   private items: Pool<FxItem>;
   private texts: Pool<FloatingText>;
@@ -177,7 +182,7 @@ export class FxSystem {
       this.spawn({ texture: 'fx_glow_cool', x, y, life: 0.26, scale0: 1.4 * power, scale1: 2.4 * power });
     } else if (kind === 'siege') {
       this.sparkBurst(x, y, 12, 'fx_spark_warm', { speed: 200, life: 0.4, scale: 1.3 * power, gravity: 320, tint: ELEMENT.holy.core, ...bias });
-      this.sparkBurst(x, y, 6, 'fx_smoke', { speed: 70, life: 0.7, scale: 1.5, gravity: -30, tint: 0x8a8478, depth: DEPTH.FX - 1 });
+      this.sparkBurst(x, y, 6, 'fx_smoke', { speed: 70, life: 0.7, scale: 1.5, gravity: -30, tint: this.regionTint?.smoke ?? 0x8a8478, depth: DEPTH.FX - 1 });
     } else if (kind === 'blood') {
       this.sparkBurst(x, y, 7, 'fx_spark_blood', { speed: 130, life: 0.42, scale: 1 * power, gravity: 300, tint: 0xd94a4a, ...bias });
     } else {
@@ -268,7 +273,7 @@ export class FxSystem {
       gravity: 170,
       tint: magic ? ELEMENT.frost.core : ELEMENT.fire.core,
     });
-    this.sparkBurst(x, y, small ? 4 : 9, 'fx_smoke', { speed: 90, life: 0.8, scale: 1.9, gravity: -30, tint: 0x6f6a62, depth: DEPTH.FX - 1 });
+    this.sparkBurst(x, y, small ? 4 : 9, 'fx_smoke', { speed: 90, life: 0.8, scale: 1.9, gravity: -30, tint: this.regionTint?.smoke ?? 0x6f6a62, depth: DEPTH.FX - 1 });
     this.shake(small ? 2.5 : Math.min(8, radius / 14), small ? 0.12 : 0.24, 'heavy');
   }
 

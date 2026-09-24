@@ -37,7 +37,7 @@ const built = await esbuild.build({
   platform: 'node',
 });
 const bible = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
-const { STYLE, FACTION, REGION, ELEMENT, SPECIAL, LIGHT, VFX, RANK, UI, TYPE, PROPORTIONS, ALL_COLORS, contrast, luminance } = bible;
+const { STYLE, FACTION, REGION, REGION_VFX, ELEMENT, SPECIAL, LIGHT, VFX, RANK, UI, TYPE, PROPORTIONS, CAMERA, ALL_COLORS, contrast, luminance } = bible;
 const hex = (n) => `#${n.toString(16).padStart(6, '0')}`;
 
 // ── 1. structural rules ─────────────────────────────────────────────────────
@@ -104,6 +104,21 @@ check('vfx: per-hit particle counts stay inside budget', VFX.sparkCount.melee <=
 check('vfx: boss death is the only large burst', VFX.sparkCount.bossDeath > VFX.sparkCount.explosion, `${VFX.sparkCount.explosion} → ${VFX.sparkCount.bossDeath}`);
 check('vfx: element palettes are complete', Object.values(ELEMENT).every((e) => e.core && e.bright && e.trail && e.residue && e.number), Object.keys(ELEMENT).join(' '));
 
+// ── 4b. region atmosphere + time of day ────────────────────────────────────
+check('region vfx: every region defines its own mote layer and impact palette', Object.keys(REGION_VFX).length === Object.keys(REGION).length && Object.values(REGION_VFX).every((v) => v.mote && v.impact), Object.keys(REGION_VFX).join(' '));
+const moteColours = new Set(Object.values(REGION_VFX).map((v) => v.mote.color));
+check('region vfx: motes are visually distinct per region (a forest is not a fortress)', moteColours.size === Object.keys(REGION_VFX).length, [...moteColours].map(hex).join(' '));
+check('region vfx: each region has a distinct smoke tint', new Set(Object.values(REGION_VFX).map((v) => v.impact.smoke)).size === Object.keys(REGION_VFX).length, Object.values(REGION_VFX).map((v) => hex(v.impact.smoke)).join(' '));
+check('region vfx: mote counts stay inside a sane budget', Object.values(REGION_VFX).every((v) => v.mote.count <= 90 && (!v.spark || v.spark.count <= 40)), Object.values(REGION_VFX).map((v) => `${v.mote.count}+${v.spark?.count ?? 0}`).join(' '));
+check('light: all four time-of-day presets exist and get darker toward night', LIGHT.timeOfDay.dawn.alpha < LIGHT.timeOfDay.night.alpha && LIGHT.timeOfDay.day.alpha < LIGHT.timeOfDay.dusk.alpha, Object.entries(LIGHT.timeOfDay).map(([k, v]) => `${k}:${v.alpha}`).join(' '));
+
+// ── 4c. camera language ────────────────────────────────────────────────────
+check('camera: every camera context is defined', ['menu', 'battle', 'victory', 'boss'].every((k) => !!CAMERA[k]), Object.keys(CAMERA).join(' '));
+check('camera: the menu never shakes and only drifts slowly', CAMERA.menu.drift > 0 && CAMERA.menu.drift < 0.1 && CAMERA.menu.zoom === 1, `drift ${CAMERA.menu.drift}`);
+check('camera: victory pushes IN, boss pushes in less than victory', CAMERA.victory.zoom > 1 && CAMERA.boss.zoom > 1 && CAMERA.victory.zoom >= CAMERA.boss.zoom, `victory ${CAMERA.victory.zoom} / boss ${CAMERA.boss.zoom}`);
+check('camera: the battle zoom range is bounded', CAMERA.battle.zoomMin < CAMERA.battle.zoomDefault && CAMERA.battle.zoomDefault < CAMERA.battle.zoomMax, `${CAMERA.battle.zoomMin}-${CAMERA.battle.zoomMax}`);
+check('camera: boss shake is capped by the bible, not by the call site', CAMERA.boss.shakeCap === 'ultimate' && VFX.shake.ultimate <= 14, `${CAMERA.boss.shakeCap} <= ${VFX.shake.ultimate}`);
+
 // ── 5. type / icon rules ────────────────────────────────────────────────────
 check('type: exactly four font sizes are defined', Object.keys(TYPE.size).length === 4, Object.values(TYPE.size).join('/'));
 check('type: HUD text is always outlined', TYPE.outline.width >= 1 && TYPE.outline.color !== 0, `${TYPE.outline.width}px ${hex(TYPE.outline.color)}`);
@@ -145,10 +160,17 @@ const runtime = await page.evaluate(() => {
     unitColors: units.filter((u) => u.team === 1).map((u) => ({ id: u.def.id, body: u.def.art.body, trim: u.def.art.trim, accent: u.def.art.accent })).slice(0, 8),
     heroSignal: b.world.hero ? b.world.hero.def.art.accent : 0,
     region: b.mission.map.biome,
+    missionTod: b.mission.timeOfDay ?? 'day',
+    light: b.lighting ? { ...b.lighting.view } : null,
   };
 });
 check('runtime: the region lighting layer exists and sits below the entities', runtime.hasLighting && runtime.ambient && runtime.lightingDepth < runtime.entityDepth, `depth ${runtime.lightingDepth} < ${runtime.entityDepth}`);
 check('runtime: the region has a lighting + fog definition', !!REGION[runtime.region], runtime.region);
+check(
+  'runtime: the match is lit with its mission time of day and has region motes',
+  runtime.light && runtime.light.motes > 0 && runtime.light.timeOfDay === runtime.missionTod,
+  JSON.stringify(runtime.light),
+);
 
 // unit colours must come from the faction vocabulary (exact match on the signal colour, and
 // the body colour must be a plausible faction/neutral tone rather than an arbitrary hue)
@@ -173,6 +195,49 @@ check(
   runtime.heroSignal === FACTION.dawn.signal,
   `${hex(runtime.heroSignal)} vs ${hex(FACTION.dawn.signal)}`,
 );
+
+// ── 6b. the terrain must actually be painted with its region palette ────────
+// Sample the ground colour straight out of the terrain canvas: this is what stops the three
+// biomes silently collapsing back into one green valley (which is exactly what had happened).
+const terrainSampled = await page.evaluate(() => {
+  const b = window.__AETHERIA_BATTLE__;
+  const key = 'terrain';
+  const tex = b.textures.get(key);
+  const src = tex && tex.source && tex.source[0];
+  if (!src || !src.image) return { error: 'no terrain canvas' };
+  const img = src.image;
+  const c = document.createElement('canvas');
+  c.width = img.width;
+  c.height = img.height;
+  const g = c.getContext('2d');
+  g.drawImage(img, 0, 0);
+  // count the most common colour in a walkable strip near the player's base
+  const counts = new Map();
+  for (let y = 40; y < 200; y += 3) {
+    for (let x = 40; x < 600; x += 3) {
+      const d = g.getImageData(x, y, 1, 1).data;
+      // ignore the near-black out-of-bounds/decor pixels
+      if (d[0] + d[1] + d[2] < 90) continue;
+      const k = (d[0] << 16) | (d[1] << 8) | d[2];
+      counts.set(k, (counts.get(k) ?? 0) + 1);
+    }
+  }
+  const top = [...counts.entries()].sort((a, c2) => c2[1] - a[1]).slice(0, 3).map(([k, n]) => ({ color: k, n }));
+  return { top, region: b.mission.map.biome };
+});
+check('runtime: the terrain canvas was sampled', !terrainSampled.error, terrainSampled.error ?? '');
+if (!terrainSampled.error) {
+  const ground = REGION[terrainSampled.region].ground;
+  const dist = (a, c) =>
+    Math.abs(((a >> 16) & 0xff) - ((c >> 16) & 0xff)) + Math.abs(((a >> 8) & 0xff) - ((c >> 8) & 0xff)) + Math.abs((a & 0xff) - (c & 0xff));
+  const best = Math.min(...terrainSampled.top.map((t) => dist(t.color, ground)));
+  // the noise + ambient passes shift the value, so allow a generous but meaningful tolerance
+  check(
+    'runtime: the ground is painted from the mission region palette, not a fixed valley green',
+    best <= 90,
+    `region ${terrainSampled.region} ground ${hex(ground)} · sampled ${terrainSampled.top.map((t) => hex(t.color)).join(' ')} · min distance ${best}`,
+  );
+}
 
 // ── 7. render the reference sheet straight from the bible ───────────────────
 const sheet = await page.evaluate(
@@ -286,7 +351,7 @@ const sheet = await page.evaluate(
     drawFigure(440, 40, B.PROPORTIONS.beast.headSize, 0.9, 'beast', B.FACTION.wildborn.signal, 0.4);
     return c.toDataURL('image/png');
   },
-  { bibleJson: JSON.stringify({ STYLE, FACTION, REGION, ELEMENT, SPECIAL, LIGHT, VFX, RANK, UI, TYPE, ALL_COLORS, PROPORTIONS }) },
+  { bibleJson: JSON.stringify({ STYLE, FACTION, REGION, REGION_VFX, ELEMENT, SPECIAL, LIGHT, VFX, RANK, UI, TYPE, ALL_COLORS, PROPORTIONS, CAMERA }) },
 );
 const sheetPath = `${OUT}50-visual-bible.png`;
 await (await import('node:fs/promises')).writeFile(sheetPath, Buffer.from(sheet.split(',')[1], 'base64'));

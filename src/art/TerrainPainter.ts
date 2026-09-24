@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { TILE, Tile } from '../config/Constants';
 import { PAL } from '../art/Palette';
+import { REGION, shade, toCss } from '../art/VisualBible';
 import type { GeneratedMap } from '../world/MapGen';
 import { tileAt } from '../world/MapGen';
 
@@ -15,7 +16,19 @@ function css(color: number, a = 1): string {
  * Bakes the whole tilemap into ONE canvas texture: the terrain is a single draw call
  * no matter how big the map is (this is the main reason the frame budget is stable).
  */
-export function paintTerrain(scene: Phaser.Scene, map: GeneratedMap, key = 'terrain'): string {
+export function paintTerrain(
+  scene: Phaser.Scene,
+  map: GeneratedMap,
+  key = 'terrain',
+  region: keyof typeof REGION = 'valley',
+): string {
+  // Visual Bible §4: every map is painted with its own region palette. Without this all ten
+  // missions looked like the same green valley no matter what the biome claimed to be.
+  const R = REGION[region] ?? REGION.valley;
+  const ground = R.ground;
+  const groundAlt = R.groundAlt;
+  const stone = R.stone;
+  const canopy = shade(groundAlt, -0.14);
   const w = map.w * TILE;
   const h = map.h * TILE;
   // reuse an existing texture of the same size (destroying it invalidates live frames)
@@ -31,7 +44,7 @@ export function paintTerrain(scene: Phaser.Scene, map: GeneratedMap, key = 'terr
   const c = canvasTex.getContext();
 
   // base fill
-  c.fillStyle = css(PAL.grassA);
+  c.fillStyle = css(ground);
   c.fillRect(0, 0, w, h);
 
   // ── ground: one base colour + a smooth noise field + scattered detail ──
@@ -96,7 +109,10 @@ export function paintTerrain(scene: Phaser.Scene, map: GeneratedMap, key = 'terr
     if (rz < 0.55) {
       // grass tuft
       c.save();
-      c.strokeStyle = tile === Tile.GRASS ? 'rgba(120,175,90,0.5)' : 'rgba(150,130,80,0.45)';
+      c.strokeStyle =
+        tile === Tile.GRASS
+          ? toCss(shade(groundAlt, 0.18), 0.5)
+          : toCss(shade(R.ground, 0.12), 0.45);
       c.lineWidth = 1.2;
       for (let k = -1; k <= 1; k++) {
         c.beginPath();
@@ -108,7 +124,7 @@ export function paintTerrain(scene: Phaser.Scene, map: GeneratedMap, key = 'terr
     } else if (rz < 0.8) {
       // small stone
       c.save();
-      c.fillStyle = 'rgba(120,118,112,0.5)';
+      c.fillStyle = toCss(shade(stone, -0.05), 0.5);
       c.beginPath();
       c.ellipse(px, py, 1.6 + rz * 2, 1.1 + rz, rz * 3, 0, Math.PI * 2);
       c.fill();
@@ -116,7 +132,7 @@ export function paintTerrain(scene: Phaser.Scene, map: GeneratedMap, key = 'terr
     } else if (rz < 0.92 && tile === Tile.GRASS) {
       // tiny flower
       c.save();
-      c.fillStyle = rz < 0.87 ? 'rgba(240,230,150,0.6)' : 'rgba(220,160,200,0.55)';
+      c.fillStyle = rz < 0.87 ? toCss(R.accent, 0.55) : toCss(shade(R.accent, 0.1), 0.5);
       c.beginPath();
       c.arc(px, py, 1.5, 0, Math.PI * 2);
       c.fill();
@@ -153,8 +169,17 @@ export function paintTerrain(scene: Phaser.Scene, map: GeneratedMap, key = 'terr
   return key;
 }
 
-/** Small version of the terrain for the minimap, painted once at boot. */
-export function paintMinimapBase(scene: Phaser.Scene, map: GeneratedMap): string {
+/** Small version of the terrain for the minimap, painted once at boot (region-aware). */
+export function paintMinimapBase(
+  scene: Phaser.Scene,
+  map: GeneratedMap,
+  region: keyof typeof REGION = 'valley',
+): string {
+  const R = REGION[region] ?? REGION.valley;
+  const ground = R.ground;
+  const groundAlt = R.groundAlt;
+  const stone = R.stone;
+  const canopy = shade(groundAlt, -0.14);
   const key = 'minimapBase';
   const scale = 3;
   const w = map.w * scale;
@@ -172,13 +197,13 @@ export function paintMinimapBase(scene: Phaser.Scene, map: GeneratedMap): string
   for (let ty = 0; ty < map.h; ty++) {
     for (let tx = 0; tx < map.w; tx++) {
       const t = tileAt(map, tx, ty);
-      let col = PAL.grassA;
-      if (t === Tile.WATER) col = PAL.water;
-      else if (t === Tile.TREE) col = 0x2f4a28;
-      else if (t === Tile.ROCK) col = 0x6b6257;
+      let col: number = ground;
+      if (t === Tile.WATER) col = shade(PAL.water, (region === 'fortress' ? -0.06 : region === 'forest' ? -0.03 : 0));
+      else if (t === Tile.TREE) col = canopy;
+      else if (t === Tile.ROCK) col = stone;
       else if (t === Tile.BRIDGE) col = PAL.bridge;
-      else if (t === Tile.ROAD) col = PAL.road;
-      else if (t === Tile.DIRT) col = PAL.dirt;
+      else if (t === Tile.ROAD) col = shade(R.groundAlt, 0.1);
+      else if (t === Tile.DIRT) col = shade(R.ground, -0.12);
       c.fillStyle = css(col);
       c.fillRect(tx * scale, ty * scale, scale, scale);
     }

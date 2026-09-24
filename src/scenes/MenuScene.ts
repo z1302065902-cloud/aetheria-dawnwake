@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { CAMERA } from '../art/VisualBible';
 import { PAL, toCss } from '../art/Palette';
 import { Button, drawPanel, text } from '../ui/UiKit';
 import { audio } from '../audio/AudioBus';
@@ -33,16 +34,31 @@ export class MenuScene extends Phaser.Scene {
   create(): void {
     this.W = this.scale.width;
     this.H = this.scale.height;
+    // Visual Bible §12: the menu camera drifts slowly and never shakes. The parallax offset is
+    // applied to the decorative layers instead of a real camera so the UI stays pixel-aligned.
+    this.drift = this.cameras.main.zoom * 0;
     this.g = this.add.graphics().setDepth(1);
     this.bg = this.add.graphics().setDepth(0);
     this.root = this.add.container(0, 0).setDepth(10);
 
+    this.driftT = 0;
     audio.playMusic('menu');
     this.scale.on('resize', this.onResize);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off('resize', this.onResize);
     });
     this.render();
+  }
+
+  private drift = 0;
+  private driftT = 0;
+
+  /** Menu camera language: a very slow horizontal drift across the painted backdrop. */
+  update(_time: number, delta: number): void {
+    this.driftT += delta / 1000;
+    this.drift = Math.sin(this.driftT * CAMERA.menu.drift) * 18;
+    this.bg?.setX(this.drift * 0.5);
+    this.g?.setX(this.drift);
   }
 
   private onResize = (): void => {

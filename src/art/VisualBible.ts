@@ -179,6 +179,47 @@ export const REGION: Record<'valley' | 'forest' | 'fortress' | 'arena', RegionSt
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 4b. REGION VFX — 每个区域的粒子/天气配色（森林飘叶萤火、堡垒飘灰烬、竞技场火星）
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface RegionVfx {
+  name: string;
+  /** ambient motes that drift across the map all match long */
+  mote: { color: number; alpha: number; size: number; count: number; driftX: number; driftY: number; bob: number };
+  /** second mote layer, usually rarer and brighter (fireflies, embers) */
+  spark: { color: number; alpha: number; size: number; count: number; blink: number } | null;
+  /** what a hit leaves behind here: smoke tint + ground residue + debris colour */
+  impact: { smoke: number; residue: number; debris: number };
+}
+
+export const REGION_VFX: Record<'valley' | 'forest' | 'fortress' | 'arena', RegionVfx> = {
+  valley: {
+    name: '绿谷',
+    mote: { color: 0xe8e0b0, alpha: 0.4, size: 1.6, count: 54, driftX: 9, driftY: -5, bob: 0.9 },
+    spark: { color: 0xfff0a0, alpha: 0.5, size: 2.2, count: 10, blink: 0.55 },
+    impact: { smoke: 0x8a8478, residue: 0x3a2a18, debris: 0xb9a884 },
+  },
+  forest: {
+    name: '暗影森林',
+    mote: { color: 0x9fe07a, alpha: 0.4, size: 1.8, count: 62, driftX: 12, driftY: -3, bob: 1.2 },
+    spark: { color: 0xd8ff9a, alpha: 0.62, size: 2.4, count: 22, blink: 0.4 },
+    impact: { smoke: 0x4a5a44, residue: 0x243018, debris: 0x7fa05a },
+  },
+  fortress: {
+    name: '黑暗堡垒',
+    mote: { color: 0x9a94a8, alpha: 0.34, size: 1.7, count: 70, driftX: 6, driftY: -9, bob: 0.7 },
+    spark: { color: 0x7fd8ff, alpha: 0.5, size: 2.0, count: 16, blink: 0.5 },
+    impact: { smoke: 0x6a6470, residue: 0x1a1424, debris: 0x8a8a92 },
+  },
+  arena: {
+    name: 'Boss 竞技场',
+    mote: { color: 0xff9a6a, alpha: 0.42, size: 1.9, count: 80, driftX: 4, driftY: -14, bob: 0.6 },
+    spark: { color: 0xff5a3a, alpha: 0.58, size: 2.6, count: 30, blink: 0.28 },
+    impact: { smoke: 0x5a4a48, residue: 0x2a1210, debris: 0xd9a08a },
+  },
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // 5. ELEMENTS — 技能/VFX 配色（火 冰 奥术 圣光 虚空 物理）
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -362,7 +403,8 @@ export const CAMERA = {
   menu: { zoom: 1, drift: 0.04, description: '缓慢横移的全景，无震动' },
   battle: { zoomDefault: 1, zoomMin: 0.6, zoomMax: 1.6, follow: 0.12 },
   victory: { zoom: 1.25, panMs: 1800, holdMs: 1200 },
-  boss: { zoom: 1.15, shakeCap: 'ultimate' as const, slowMotion: 0.35 },
+  /** boss entrance push-in; the shake is capped at `ultimate` and death runs at slowMotion */
+  boss: { zoom: 1.15, panMs: 1400, holdMs: 900, shakeCap: 'ultimate' as const, slowMotion: 0.35 },
 } as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -406,6 +448,7 @@ export const ALL_COLORS: number[] = Array.from(
     ...Object.values(FACTION).flatMap((f) => [f.primary, f.secondary, f.metal, f.cloth, f.signal]),
     ...Object.values(REGION).flatMap((r) => [r.ground, r.groundAlt, r.stone, r.ambient, r.fog, r.accent]),
     ...Object.values(ELEMENT).flatMap((e) => [e.core, e.bright, e.trail, e.residue, e.number]),
+    ...Object.values(REGION_VFX).flatMap((v) => [v.mote.color, v.spark?.color ?? v.mote.color, v.impact.smoke, v.impact.residue, v.impact.debris]),
     ...Object.values(SPECIAL),
     LIGHT.key.color,
     LIGHT.ambient.floor,

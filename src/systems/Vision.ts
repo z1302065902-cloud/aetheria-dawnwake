@@ -19,6 +19,11 @@ const ALPHA_UNEXPLORED = 0.88;
 const ALPHA_EXPLORED = 0.42;
 
 export class VisionGrid {
+  /**
+   * Colour of the unexplored wash (Visual Bible §4). Set from the region palette by the battle
+   * scene: the darkness over a ruined fortress is not the darkness over a green valley.
+   */
+  fogColor = 0x060912;
   readonly w: number;
   readonly h: number;
   /** 1 = currently visible */
@@ -59,9 +64,11 @@ export class VisionGrid {
     this.imageData = ctx.createImageData(this.w, this.h);
     for (let i = 0; i < this.w * this.h; i++) {
       const p = i * 4;
-      this.imageData.data[p] = 6;
-      this.imageData.data[p + 1] = 9;
-      this.imageData.data[p + 2] = 18;
+      // the unexplored wash is tinted by the region (Visual Bible §4): a fortress night is not
+      // the same colour of darkness as a green valley afternoon
+      this.imageData.data[p] = (this.fogColor >> 16) & 0xff;
+      this.imageData.data[p + 1] = (this.fogColor >> 8) & 0xff;
+      this.imageData.data[p + 2] = this.fogColor & 0xff;
       this.imageData.data[p + 3] = 255 * ALPHA_UNEXPLORED;
     }
     this.paintedVersion = -1;

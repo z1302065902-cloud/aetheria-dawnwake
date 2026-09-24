@@ -109,6 +109,7 @@ export class AIController {
     audio.sfx('bossRoar', 0.9);
     this.ctx.fx.levelUp(x, y);
     this.ctx.fx.explosion(x, y, 160, false);
+    this.onBossSpawned?.();
     return boss;
   }
 
@@ -249,6 +250,8 @@ export class AIController {
   }
 
   onWave: ((index: number, count: number) => void) | null = null;
+  /** fired the moment a boss appears, for the camera push-in */
+  onBossSpawned: (() => void) | null = null;
   /** waves that have been sent (used by "survive N waves" objectives) */
   wavesSent = 0;
 

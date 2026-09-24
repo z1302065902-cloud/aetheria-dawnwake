@@ -198,6 +198,9 @@ export interface MissionDef {
   waves: { firstAt: number; interval: number; growth: number; max: number; units: string[] };
   enemyCamps: Array<{ x: number; y: number; kind: 'wildborn' | 'voidborn'; strength: number }>;
   boss: { unitId: string; x: number; y: number; spawnOn: string };
-  parTime: number; // seconds, for the rating
+  parTime: number;
+  /** Visual Bible §6 — which time-of-day preset this mission is lit with */
+  /** Visual Bible §6 — which time-of-day preset this mission is lit with */
+  timeOfDay?: 'dawn' | 'day' | 'dusk' | 'night';
   brief: string;
 }

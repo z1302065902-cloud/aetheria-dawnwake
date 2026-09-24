@@ -37,6 +37,7 @@ import { ArmyGroupSystem, STANCE_LABEL, type Stance } from '../systems/ArmyGroup
 import { AdventureSystem } from '../systems/Adventure';
 import { MapEventsSystem } from '../systems/MapEvents';
 import { LightingSystem } from '../systems/Lighting';
+import { CAMERA, REGION } from '../art/VisualBible';
 import { Rng } from '../core/Rng';
 import { rollLoot } from '../data/items';
 import type { MissionDef } from '../data/types';
@@ -204,8 +205,8 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
     // m01 keeps its hand-tuned layout; every other mission is generated from its data
     this.map = missionId === 'm01' ? buildGreenValley() : generateMapForMission(this.mission);
     ensureTextures(this);
-    paintTerrain(this, this.map);
-    paintMinimapBase(this, this.map);
+    paintTerrain(this, this.map, 'terrain', this.mission.map.biome);
+    paintMinimapBase(this, this.map, this.mission.map.biome);
 
     this.add.image(0, 0, 'terrain').setOrigin(0, 0).setDepth(DEPTH.TERRAIN);
 
@@ -275,8 +276,16 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
     for (const land of this.map.landings) ruins.push({ x: land.x + 26, y: land.y - 30 });
     // Visual Bible §6: the region's ambient wash, applied to the ground only (below entities)
     this.lighting = new LightingSystem(this);
-    this.lighting.build(this.mission.map.biome, WORLD_W, WORLD_H);
+    this.lighting.build(this.mission.map.biome, WORLD_W, WORLD_H, this.mission.timeOfDay ?? 'day');
 
+    // region-tinted smoke/residue so impacts belong to the biome they happen in
+    this.fx.regionTint = {
+      smoke: this.lighting.impactTint('smoke'),
+      residue: this.lighting.impactTint('residue'),
+      debris: this.lighting.impactTint('debris'),
+    };
+
+    this.vision.fogColor = REGION[this.mission.map.biome]?.fog ?? 0x060912;
     this.environment.vision = this.vision;
     this.environment.build({ torches, banners, ruins });
 
@@ -362,6 +371,9 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
     this.armies.update(0);
 
     // ── Roguelite: one random blessing per run (fixed map + fixed main objectives) ──
+    // Visual Bible §12: the boss arrival gets a push-in and a short hold (the camera is the
+    // cheapest way to say "this matters")
+    this.ai.onBossSpawned = () => this.bossIntroCamera();
     this.runBlessing = this.rollBlessing();
     this.world.mods = { ...this.world.mods, ...this.blessingMods(this.runBlessing.id) };
     this.environment.attachWaterShimmer(this.map.w * 40, this.map.h * 40);
@@ -406,6 +418,11 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
     this.missions.onHeroLevel = (lvl) => bus.emit(EV.BANNER, { text: `指挥官升到 ${lvl} 级`, sub: '等级提升 · 属性成长' });
     this.missions.onObjectiveRevealed = (o) =>
       bus.emit(EV.BANNER, { text: '发现隐藏目标', sub: o.def.text });
+    // Visual Bible §12: victory pushes in on the hero, defeat stays wide so the loss reads
+    this.missions.onResolved = (victory) => {
+      if (victory) this.victoryCamera();
+      else this.cameras.main.zoomTo(0.9, 1200, 'Sine.easeOut');
+    };
     this.ai.onWave = (index, count) => {
       this.missions.wavesSurvived = index;
       bus.emit(EV.BANNER, { text: `第 ${index} 波进攻 (${count} 单位)`, sub: '荒野氏族从营地出发' });
@@ -458,7 +475,7 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
       }
       // while the player is deciding where to put a building, automation must not spend
       if (this.placementId) this.automation.holdProduction(0.5);
-      this.lighting.update(dt);
+      this.lighting.update(dt, this.cameras.main.worldView);
       this.environment.update(dt);
       this.automation.update(dt);
       this.armies.update(dt);
@@ -1199,6 +1216,45 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
   /** GameCtx: deposits feed "gather N gold" objectives. */
   onResourceDeposited(kind: 'gold' | 'wood' | 'mana', amount: number): void {
     this.missions.onDeposit(kind, amount);
+  }
+
+  /** Boss push-in: zoom to the bible's boss value, hold on the boss, then hand control back. */
+  private bossIntroCamera(): void {
+    const boss = this.ai.boss;
+    if (!boss) return;
+    // a boss can appear in the same frame the match resolves (spawn -> killed by the last hit);
+    // the victory camera owns the frame in that case
+    if (this.ended || this.missions.victory) return;
+    const cam = this.cameras.main;
+    const prevZoom = cam.zoom;
+    cam.stopFollow();
+    cam.pan(boss.x, boss.y, CAMERA.boss.panMs, 'Sine.easeInOut', false);
+    cam.zoomTo(CAMERA.boss.zoom, CAMERA.boss.panMs, 'Sine.easeInOut');
+    bus.emit(EV.BANNER, { text: this.mission.boss.unitId ? 'Boss 现身' : '强敌现身', sub: '镜头推近 · 准备迎战' });
+    this.time.delayedCall(CAMERA.boss.panMs + CAMERA.boss.holdMs, () => {
+      // the match may have ended inside the hold window (a boss intro can be interrupted by
+      // victory): restoring the camera then would fight the victory push-in
+      if (this.ended) return;
+      cam.zoomTo(prevZoom, 600, 'Sine.easeOut');
+      const hero = this.world.hero;
+      if (hero && !hero.dead) cam.startFollow(hero, true, CAMERA.battle.follow, CAMERA.battle.follow);
+    });
+  }
+
+  /** Victory push-in: slow zoom toward the hero/castle, then hold (Visual Bible §12). */
+  private victoryCamera(): void {
+    const cam = this.cameras.main;
+    // Phaser drives zoomTo/pan through Camera effects, NOT tweens, so `killTweensOf` does not
+    // cancel them — a boss push-in that started in the same frame would sail past the victory
+    // zoom and leave the camera at the boss value. Reset the effects explicitly.
+    cam.zoomEffect?.reset();
+    cam.panEffect?.reset();
+    this.tweens.killTweensOf(cam);
+    cam.stopFollow();
+    const hero = this.world.hero;
+    const focus = hero && !hero.dead ? { x: hero.x, y: hero.y } : this.map.playerStart;
+    cam.pan(focus.x, focus.y, CAMERA.victory.panMs, 'Sine.easeInOut', false);
+    cam.zoomTo(CAMERA.victory.zoom, CAMERA.victory.panMs, 'Sine.easeInOut');
   }
 
   /** Per-run random blessing. Map layout and main objectives never change. */

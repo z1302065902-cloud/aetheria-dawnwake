@@ -43,6 +43,7 @@ export const MISSIONS: MissionDef[] = [
       { x: 50, y: 52, kind: 'wildborn', strength: 3 },
     ],
     boss: { unitId: 'thornmaw', x: 50, y: 52, spawnOn: 'o4' },
+    timeOfDay: 'day',
     parTime: 20 * 60,
     brief: '建立前哨基地、训练部队、拔掉荒野氏族的据点。营地陷落时，这片谷地的主人会亲自现身。',
   },
@@ -59,6 +60,7 @@ export const MISSIONS: MissionDef[] = [
     waves: { firstAt: 120, interval: 95, growth: 1.2, max: 10, units: ['raider', 'hunter'] },
     enemyCamps: [{ x: 46, y: 30, kind: 'wildborn', strength: 3 }],
     boss: { unitId: 'thornmaw', x: 46, y: 30, spawnOn: 'o2' },
+    timeOfDay: 'dawn',
     parTime: 18 * 60, brief: '通往南门的路上全是伏击。别让补给车停下。',
   },
   {
@@ -74,6 +76,7 @@ export const MISSIONS: MissionDef[] = [
     waves: { firstAt: 100, interval: 90, growth: 1.22, max: 10, units: ['raider', 'wolfrider'] },
     enemyCamps: [{ x: 52, y: 46, kind: 'wildborn', strength: 5 }],
     boss: { unitId: 'thornmaw', x: 52, y: 46, spawnOn: 'o1' },
+    timeOfDay: 'day',
     parTime: 18 * 60, brief: '主动出击。拆掉他们的生产建筑，狼群就没有增援。',
   },
   {
@@ -89,6 +92,7 @@ export const MISSIONS: MissionDef[] = [
     waves: { firstAt: 130, interval: 100, growth: 1.2, max: 10, units: ['raider', 'direwolf', 'shaman'] },
     enemyCamps: [{ x: 50, y: 44, kind: 'wildborn', strength: 4 }],
     boss: { unitId: 'thornmaw', x: 50, y: 44, spawnOn: 'o1' },
+    timeOfDay: 'dusk',
     parTime: 20 * 60, brief: '在暗影森林里找到他——然后活着带他回来。',
   },
   {
@@ -104,6 +108,7 @@ export const MISSIONS: MissionDef[] = [
     waves: { firstAt: 60, interval: 55, growth: 1.25, max: 12, units: ['raider', 'hunter', 'wolfrider', 'shaman'] },
     enemyCamps: [{ x: 56, y: 18, kind: 'wildborn', strength: 5 }],
     boss: { unitId: 'thornmaw', x: 56, y: 18, spawnOn: 'time' },
+    timeOfDay: 'day',
     parTime: 16 * 60, brief: '纯防守。把金币变成塔和墙，撑过八分钟。',
   },
   {
@@ -119,6 +124,7 @@ export const MISSIONS: MissionDef[] = [
     waves: { firstAt: 120, interval: 95, growth: 1.2, max: 11, units: ['raider', 'direwolf', 'hunter'] },
     enemyCamps: [{ x: 26, y: 22, kind: 'wildborn', strength: 4 }],
     boss: { unitId: 'thornmaw', x: 26, y: 22, spawnOn: 'o1' },
+    timeOfDay: 'dusk',
     parTime: 20 * 60, brief: '森林会用伏击教你什么叫视野。',
   },
   {
@@ -134,6 +140,7 @@ export const MISSIONS: MissionDef[] = [
     waves: { firstAt: 110, interval: 90, growth: 1.22, max: 11, units: ['raider', 'wolfrider', 'shaman'] },
     enemyCamps: [{ x: 48, y: 48, kind: 'wildborn', strength: 5 }],
     boss: { unitId: 'thornmaw', x: 48, y: 48, spawnOn: 'o1' },
+    timeOfDay: 'day',
     parTime: 20 * 60, brief: '经济战。打断他们的收入，比堆兵更有效。',
   },
   {
@@ -149,6 +156,7 @@ export const MISSIONS: MissionDef[] = [
     waves: { firstAt: 100, interval: 85, growth: 1.25, max: 12, units: ['shade', 'raider', 'shaman'] },
     enemyCamps: [{ x: 50, y: 50, kind: 'voidborn', strength: 5 }],
     boss: { unitId: 'voidsorcerer', x: 50, y: 50, spawnOn: 'o1' },
+    timeOfDay: 'night',
     parTime: 22 * 60, brief: '虚空族第一次露面。他们的法术会溅射，散开队形。',
   },
   {
@@ -164,6 +172,7 @@ export const MISSIONS: MissionDef[] = [
     waves: { firstAt: 95, interval: 80, growth: 1.28, max: 13, units: ['shade', 'raider', 'shaman'] },
     enemyCamps: [{ x: 52, y: 50, kind: 'voidborn', strength: 6 }],
     boss: { unitId: 'voidsorcerer', x: 52, y: 50, spawnOn: 'o1' },
+    timeOfDay: 'night',
     parTime: 22 * 60, brief: '用投石车砸开祭坛。虚空巫妖会阻止你。',
   },
   {
@@ -179,6 +188,7 @@ export const MISSIONS: MissionDef[] = [
     waves: { firstAt: 80, interval: 70, growth: 1.3, max: 15, units: ['shade', 'wolfrider', 'shaman', 'raider'] },
     enemyCamps: [{ x: 56, y: 54, kind: 'voidborn', strength: 7 }],
     boss: { unitId: 'ancientdragon', x: 56, y: 54, spawnOn: 'o1' },
+    timeOfDay: 'night',
     parTime: 25 * 60, brief: '最后一战。巨龙不会被城墙挡住。',
   },
 ];
