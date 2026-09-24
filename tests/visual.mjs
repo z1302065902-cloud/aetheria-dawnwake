@@ -271,7 +271,12 @@ const browser = await chromium.launch({
 });
 const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
 const errors = [];
+const warnings = [];
 page.on('pageerror', (e) => errors.push(e.message));
+page.on('console', (m) => {
+  const t = m.text();
+  if (/has no frame|has no animation|Cannot read|undefined is not/.test(t)) warnings.push(t);
+});
 await page.goto(TARGET, { waitUntil: 'load', timeout: 60000 });
 await page.waitForFunction(() => window.__AETHERIA__ && window.__AETHERIA__.scene.isActive('Menu'), null, { timeout: 30000 });
 
@@ -333,6 +338,44 @@ check(
   'runtime: the hero carries the player signal colour (readable at a glance)',
   runtime.heroSignal === FACTION.dawn.signal,
   `${hex(runtime.heroSignal)} vs ${hex(FACTION.dawn.signal)}`,
+);
+
+// ── 6a2. asset integrity: every animation frame must exist in its texture ──
+// A real-browser playtest surfaced `Texture "u_settler" has no frame "14"`: the spritesheet was
+// built with ceil(cell*count*SS) width while each frame was ceil(cell*SS), so the last frame fell
+// outside the texture. This assertion walks every registered animation and would have caught it.
+const frameAudit = await page.evaluate(() => {
+  const g = window.__AETHERIA__;
+  const missing = [];
+  const anims = g.anims && g.anims.anims ? Object.keys(g.anims.anims.entries) : [];
+  for (const key of anims) {
+    const anim = g.anims.anims.entries[key];
+    for (const f of anim.frames) {
+      const tex = g.textures.get(f.textureKey);
+      if (!tex || !tex.frames || !tex.frames[f.textureFrame]) {
+        missing.push(`${key} → ${f.textureKey}#${f.textureFrame}`);
+      }
+    }
+  }
+  // also compare each unit sheet against what its layout declares
+  const counts = {};
+  for (const key of Object.keys(g.textures.list)) {
+    if (!key.startsWith('u_')) continue;
+    const tex = g.textures.get(key);
+    counts[key] = tex ? Object.keys(tex.frames).length - 1 : -1;
+  }
+  const odd = Object.entries(counts).filter(([, n]) => ![11, 13, 15].includes(n));
+  return { anims: anims.length, missing: missing.slice(0, 6), missingCount: missing.length, sheets: Object.keys(counts).length, odd };
+});
+check(
+  'assets: no animation references a frame that is missing from its texture',
+  frameAudit.missingCount === 0,
+  `${frameAudit.anims} animations over ${frameAudit.sheets} unit sheets · missing ${JSON.stringify(frameAudit.missing)}`,
+);
+check(
+  'assets: every unit sheet has the frame count its layout declares (11 boss / 13 beast / 15 human)',
+  frameAudit.odd.length === 0,
+  frameAudit.odd.map(([k, n]) => `${k}:${n}`).join(' ') || `${frameAudit.sheets} sheets all valid`,
 );
 
 // ── 6b. the terrain must actually be painted with its region palette ────────
@@ -498,6 +541,7 @@ check('artifacts: the reference sheet was rendered from the bible', sheet.length
 
 await page.screenshot({ path: `${OUT}51-lighting.png` });
 check('visual: no runtime errors', errors.length === 0, errors.slice(0, 2).join(' | '));
+check('visual: no missing-frame / undefined console warnings during a live battle', warnings.length === 0, warnings.slice(0, 3).join(' | '));
 await browser.close();
 console.log(`\n${failures === 0 ? 'VISUAL BIBLE ENFORCED' : `${failures} VISUAL CHECKS FAILED`}`);
 process.exit(failures === 0 ? 0 : 1);

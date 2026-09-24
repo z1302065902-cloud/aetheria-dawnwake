@@ -246,6 +246,11 @@ const playable = await page.evaluate(async () => {
   // "did movement still work" assertion non-deterministic. The attack check right below
   // deliberately spawns a target of its own.
   for (const u of [...b.world.units]) if (u.team === 2 || u.team === 3) b.world.killUnit(u, 1);
+  // the AI camps reinforce on a cooldown, so killing the units is not enough: a defender would
+  // spawn mid-check and the squad would (correctly) stop to fight it, making this assertion
+  // non-deterministic. Stop production for the duration of the movement check.
+  b.ai.camps = [];
+  b.ai.nextWaveAt = 1e9;
   b.world.recomputePop();
   const open = b.world.map.landings?.[0] ?? b.world.map.playerStart;
   const spot = { x: open.x + 260, y: open.y + 120 };

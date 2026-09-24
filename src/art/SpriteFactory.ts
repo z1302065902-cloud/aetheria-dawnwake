@@ -449,14 +449,16 @@ function drawBeast(c: CanvasRenderingContext2D, cx: number, by: number, spec: Ar
 function drawUnitSheet(scene: Phaser.Scene, key: string, spec: ArtSpec): UnitSheetLayout {
   const layout = layoutFor(spec);
   const poses = posesFor(layout);
-  const W = layout.cell * layout.count;
-  const H = layout.cell;
   if (scene.textures.exists(key)) return layout; // already built; frames are in use
 
-  // draw the strip into an offscreen canvas, then hand it to Phaser as a spritesheet
+  // The canvas must be exactly `frameWidth * count` wide. Computing it as
+  // ceil(cell * count * SS) instead made the last frame fall outside the texture whenever
+  // cell * SS was fractional (SS is 1.6), so Phaser registered one frame fewer than the layout
+  // declared and playing frame 14 logged "has no frame 14" and dropped the final death frame.
+  const frameSize = Math.ceil(layout.cell * UNIT_SS);
   const canvas = document.createElement('canvas');
-  canvas.width = Math.ceil(W * UNIT_SS);
-  canvas.height = Math.ceil(H * UNIT_SS);
+  canvas.width = frameSize * layout.count;
+  canvas.height = frameSize;
   const c = canvas.getContext('2d');
   if (!c) throw new Error('[art] 2d context unavailable');
   c.lineJoin = 'round';
@@ -464,8 +466,8 @@ function drawUnitSheet(scene: Phaser.Scene, key: string, spec: ArtSpec): UnitShe
   renderUnitStrip(c, spec, layout, poses, UNIT_SS);
 
   scene.textures.addSpriteSheet(key, canvas as unknown as HTMLImageElement, {
-    frameWidth: Math.ceil(layout.cell * UNIT_SS),
-    frameHeight: Math.ceil(layout.cell * UNIT_SS),
+    frameWidth: frameSize,
+    frameHeight: frameSize,
   });
   setMeta(key, 1 / UNIT_SS, layout.originY);
 

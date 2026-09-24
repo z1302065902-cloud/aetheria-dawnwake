@@ -1,35 +1,35 @@
 GPU: Google Inc. (Apple) / ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version) [uncapped mode]
 viewport 1600×900 @dpr 2 · cores 16 · mem 32
-[baseline · 6 units + base] avg 1.35ms (741.3 FPS) · p50 1.10 · p95 2.40 · worst 2.70 · frames>33ms 0/298 · 22 units
-[design load · 60 units fighting] avg 1.34ms (745.7 FPS) · p50 1.10 · p95 2.20 · worst 2.70 · frames>33ms 0/298 · 78 units
-[peak load · combat + particles + minimap] avg 1.35ms (739.6 FPS) · p50 1.40 · p95 2.30 · worst 2.60 · frames>33ms 0/298 · 81 units
-[worst case · 90 units + boss] avg 1.36ms (734.2 FPS) · p50 1.20 · p95 2.20 · worst 2.80 · frames>33ms 0/298 · 112 units
-[worst case · boss fight sustained] avg 1.35ms (742.6 FPS) · p50 1.20 · p95 2.20 · worst 2.70 · frames>33ms 0/298 · 115 units
-[units  10] frame 1.38ms (725 FPS) · cpu 0.047ms/tick · p95 2.30ms · worst 6.90ms · heap 79MB · 9 alive
-[units  20] frame 1.40ms (715 FPS) · cpu 0.063ms/tick · p95 2.40ms · worst 9.00ms · heap 77MB · 20 alive
-[units  40] frame 1.40ms (715 FPS) · cpu 0.094ms/tick · p95 2.40ms · worst 12.40ms · heap 79MB · 39 alive
-[units  60] frame 1.40ms (716 FPS) · cpu 0.125ms/tick · p95 2.30ms · worst 16.50ms · heap 77MB · 58 alive
+[baseline · 6 units + base] avg 1.53ms (652.2 FPS) · p50 1.60 · p95 3.00 · worst 4.50 · frames>33ms 0/298 · 22 units
+[design load · 60 units fighting] avg 1.49ms (669.8 FPS) · p50 1.50 · p95 3.10 · worst 4.40 · frames>33ms 0/298 · 78 units
+[peak load · combat + particles + minimap] avg 1.43ms (700.0 FPS) · p50 1.40 · p95 3.00 · worst 5.40 · frames>33ms 0/298 · 81 units
+[worst case · 90 units + boss] avg 1.45ms (688.5 FPS) · p50 1.50 · p95 2.90 · worst 4.20 · frames>33ms 0/298 · 112 units
+[worst case · boss fight sustained] avg 1.40ms (715.5 FPS) · p50 1.40 · p95 2.70 · worst 3.30 · frames>33ms 0/298 · 115 units
+[units  10] frame 1.41ms (707 FPS) · cpu 0.055ms/tick · p95 2.60ms · worst 7.90ms · heap 79MB · 9 alive
+[units  20] frame 1.54ms (649 FPS) · cpu 0.087ms/tick · p95 3.40ms · worst 12.10ms · heap 79MB · 20 alive
+[units  40] frame 1.55ms (647 FPS) · cpu 0.123ms/tick · p95 3.30ms · worst 16.30ms · heap 77MB · 39 alive
+[units  60] frame 1.58ms (634 FPS) · cpu 0.171ms/tick · p95 3.80ms · worst 5.00ms · heap 77MB · 58 alive
 
 | units | FPS | frame ms | sim ms/tick | p95 ms | worst ms | heap MB | effects |
 |---|---|---|---|---|---|---|---|
-| 10 | 725 | 1.38 | 0.047 | 2.30 | 6.90 | 79 | 29 |
-| 20 | 715 | 1.40 | 0.063 | 2.40 | 9.00 | 77 | 81 |
-| 40 | 715 | 1.40 | 0.094 | 2.40 | 12.40 | 79 | 128 |
-| 60 | 716 | 1.40 | 0.125 | 2.30 | 16.50 | 77 | 199 |
-PASS  perf table: every unit tier holds 60 FPS — 10u:725fps 20u:715fps 40u:715fps 60u:716fps
-PASS  perf table: simulation stays under 3ms/tick at 60 units — 10u:0.05ms 20u:0.06ms 40u:0.09ms 60u:0.13ms
-PASS  perf table: no frame spike over 50ms at any tier — 10u:6.9ms 20u:9.0ms 40u:12.4ms 60u:16.5ms
-[ramp · target 120] avg 1.42ms (706.0 FPS) · p95 2.20 · worst 2.70 · 119 alive
-[ramp · target 200] avg 1.38ms (727.2 FPS) · p95 2.20 · worst 2.70 · 199 alive
-[ramp · target 300] avg 1.36ms (737.8 FPS) · p95 1.90 · worst 3.40 · 300 alive
-PASS  fps: headroom — 200+ units still hold the 120Hz vsync cap — 120→706fps · 200→727fps · 300→738fps
-PASS  fps: extreme stress stays above 60 FPS — 737.8 FPS at 300 units
+| 10 | 707 | 1.41 | 0.055 | 2.60 | 7.90 | 79 | 25 |
+| 20 | 649 | 1.54 | 0.087 | 3.40 | 12.10 | 79 | 98 |
+| 40 | 647 | 1.55 | 0.123 | 3.30 | 16.30 | 77 | 137 |
+| 60 | 634 | 1.58 | 0.171 | 3.80 | 5.00 | 77 | 238 |
+PASS  perf table: every unit tier holds 60 FPS — 10u:707fps 20u:649fps 40u:647fps 60u:634fps
+PASS  perf table: simulation stays under 3ms/tick at 60 units — 10u:0.06ms 20u:0.09ms 40u:0.12ms 60u:0.17ms
+PASS  perf table: no frame spike over 50ms at any tier — 10u:7.9ms 20u:12.1ms 40u:16.3ms 60u:5.0ms
+[ramp · target 120] avg 1.49ms (669.9 FPS) · p95 2.80 · worst 5.30 · 119 alive
+[ramp · target 200] avg 1.46ms (686.5 FPS) · p95 2.70 · worst 4.10 · 199 alive
+[ramp · target 300] avg 1.61ms (623.0 FPS) · p95 2.60 · worst 3.60 · 297 alive
+PASS  fps: headroom — 200+ units still hold the 120Hz vsync cap — 120→670fps · 200→686fps · 300→623fps
+PASS  fps: extreme stress stays above 60 FPS — 623.0 FPS at 297 units
 MODE: UNCAPPED (real frame cost)
 PASS  gpu: a real (non-SwiftShader) renderer is in use — ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)
-PASS  fps: baseline holds 60 FPS (avg frame <= 20ms) — 1.35ms (741.3 FPS), p95 2.40ms
-PASS  fps: 60-unit design load holds 60 FPS (avg <= 20ms) — 1.34ms (745.7 FPS), p95 2.20ms, worst 2.70ms
-PASS  fps: sustained combat holds 60 FPS (avg <= 20ms) — 1.35ms (739.6 FPS), p95 2.30ms
-PASS  fps: worst case (90 units + boss) stays above 50 FPS — 1.35ms (742.6 FPS), p95 2.20ms, worst 2.70ms
-PASS  fps: no frame hitch over 50ms in the worst case — worst 2.70ms · frames>33ms 0/298
+PASS  fps: baseline holds 60 FPS (avg frame <= 20ms) — 1.53ms (652.2 FPS), p95 3.00ms
+PASS  fps: 60-unit design load holds 60 FPS (avg <= 20ms) — 1.49ms (669.8 FPS), p95 3.10ms, worst 4.40ms
+PASS  fps: sustained combat holds 60 FPS (avg <= 20ms) — 1.43ms (700.0 FPS), p95 3.00ms
+PASS  fps: worst case (90 units + boss) stays above 50 FPS — 1.40ms (715.5 FPS), p95 2.70ms, worst 3.30ms
+PASS  fps: no frame hitch over 50ms in the worst case — worst 3.30ms · frames>33ms 0/298
 
 11/11 GPU checks passed, 0 failed
