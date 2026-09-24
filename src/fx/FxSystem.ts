@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { DEPTH } from '../config/Constants';
+import { ELEMENT, SPECIAL, VFX } from '../art/VisualBible';
 import { Pool } from '../core/Pool';
 import { FloatingText } from '../world/Projectile';
 import { metaOf } from '../art/SpriteFactory';
@@ -172,10 +173,10 @@ export class FxSystem {
   hit(x: number, y: number, kind: 'physical' | 'magic' | 'siege' | 'blood' = 'physical', power = 1, dirX = 0, dirY = 0): void {
     const bias = { biasX: dirX * 90, biasY: dirY * 50 };
     if (kind === 'magic') {
-      this.sparkBurst(x, y, 8, 'fx_spark_arc', { speed: 150, life: 0.34, scale: 1.1 * power, tint: 0x9ff0ff, ...bias });
+      this.sparkBurst(x, y, 8, 'fx_spark_arc', { speed: 150, life: 0.34, scale: 1.1 * power, tint: ELEMENT.frost.core, ...bias });
       this.spawn({ texture: 'fx_glow_cool', x, y, life: 0.26, scale0: 1.4 * power, scale1: 2.4 * power });
     } else if (kind === 'siege') {
-      this.sparkBurst(x, y, 12, 'fx_spark_warm', { speed: 200, life: 0.4, scale: 1.3 * power, gravity: 320, tint: 0xffc861, ...bias });
+      this.sparkBurst(x, y, 12, 'fx_spark_warm', { speed: 200, life: 0.4, scale: 1.3 * power, gravity: 320, tint: ELEMENT.holy.core, ...bias });
       this.sparkBurst(x, y, 6, 'fx_smoke', { speed: 70, life: 0.7, scale: 1.5, gravity: -30, tint: 0x8a8478, depth: DEPTH.FX - 1 });
     } else if (kind === 'blood') {
       this.sparkBurst(x, y, 7, 'fx_spark_blood', { speed: 130, life: 0.42, scale: 1 * power, gravity: 300, tint: 0xd94a4a, ...bias });
@@ -187,7 +188,7 @@ export class FxSystem {
 
   /** Bigger, gold, unmistakable critical hit. */
   critBurst(x: number, y: number, dirX = 0, dirY = 0): void {
-    this.sparkBurst(x, y, 16, 'fx_spark_warm', { speed: 260, life: 0.5, scale: 1.7, gravity: 240, tint: 0xffd257, biasX: dirX * 120, biasY: dirY * 70 });
+    this.sparkBurst(x, y, 16, 'fx_spark_warm', { speed: 260, life: 0.5, scale: 1.7, gravity: 240, tint: SPECIAL.crit, biasX: dirX * 120, biasY: dirY * 70 });
     this.spawn({ texture: 'fx_ring_warm', x, y, life: 0.3, scale0: 0.3, scale1: 2.2, alpha0: 0.95 });
     this.spawn({ texture: 'fx_glow_warm', x, y, life: 0.32, scale0: 1.6, scale1: 3.2 });
     this.shake(3, 0.12, 'light');
@@ -265,7 +266,7 @@ export class FxSystem {
       life: 0.5,
       scale: 1.6,
       gravity: 170,
-      tint: magic ? 0x9ff0ff : 0xffb04a,
+      tint: magic ? ELEMENT.frost.core : ELEMENT.fire.core,
     });
     this.sparkBurst(x, y, small ? 4 : 9, 'fx_smoke', { speed: 90, life: 0.8, scale: 1.9, gravity: -30, tint: 0x6f6a62, depth: DEPTH.FX - 1 });
     this.shake(small ? 2.5 : Math.min(8, radius / 14), small ? 0.12 : 0.24, 'heavy');
@@ -284,12 +285,12 @@ export class FxSystem {
       alpha1: 0,
       additive: false,
       depth: DEPTH.DECAL + 2,
-      tint: magic ? 0x6f4fbf : 0x3a2a1a,
+      tint: magic ? ELEMENT.void.core : ELEMENT.fire.residue,
     });
   }
 
   /** A rock falling from the sky onto a target point (meteor skills). */
-  fallingRock(x: number, y: number, delayMs: number, radius: number, color = 0xff7a3a): void {
+  fallingRock(x: number, y: number, delayMs: number, radius: number, color: number = ELEMENT.fire.core): void {
     const life = Math.max(0.15, delayMs / 1000);
     this.spawn({
       texture: 'p_boulder',
@@ -324,7 +325,7 @@ export class FxSystem {
   }
 
   /** Ground telegraph for an incoming AoE (boss slam, meteor, arrow rain). */
-  telegraph(x: number, y: number, radius: number, durationMs: number, color = 0xff5a4a): void {
+  telegraph(x: number, y: number, radius: number, durationMs: number, color: number = SPECIAL.boss): void {
     const life = Math.max(0.12, durationMs / 1000);
     this.spawn({
       texture: 'fx_ring_danger',
@@ -393,11 +394,11 @@ export class FxSystem {
         rotation: i * 0.4,
       });
     }
-    this.sparkBurst(x, y, 22, 'fx_spark_warm', { speed: 170, life: 1, scale: 1.5, gravity: -120, tint: 0xffd257 });
+    this.sparkBurst(x, y, 22, 'fx_spark_warm', { speed: 170, life: 1, scale: 1.5, gravity: -120, tint: SPECIAL.crit });
   }
 
   /** Sky sigil for meteor-style spells (rotating magic circle above the target). */
-  skySigil(x: number, y: number, durationMs: number, color = 0xff7a3a): void {
+  skySigil(x: number, y: number, durationMs: number, color: number = ELEMENT.fire.core): void {
     const life = Math.max(0.2, durationMs / 1000);
     this.spawn({
       texture: 'fx_ring_warm',

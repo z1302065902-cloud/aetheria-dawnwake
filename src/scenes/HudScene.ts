@@ -460,7 +460,7 @@ export class HudScene extends Phaser.Scene {
     }
 
     // ── single-player panel layout ──
-    const spW = Math.min(232 * s, this.W * 0.22);
+    const spW = Math.min(252 * s, this.W * 0.24);
     const spX = 8 * s;
     const spH = 176 * s;
     const spY = bottomY - spH - 10 * s;
@@ -868,8 +868,9 @@ export class HudScene extends Phaser.Scene {
     const exhausted =
       wk.available.wood === 0 ? '　木材已耗尽' : wk.available.gold === 0 ? '　矿脉已耗尽' : '';
     this.workerText.setText(
-      `工人 ${wk.total}　金 ${wk.assigned.gold} / 木 ${wk.assigned.wood} / 晶 ${wk.assigned.mana}${wk.assigned.idle ? `　闲置 ${wk.assigned.idle}` : ''}${wk.assigned.building ? `　建造 ${wk.assigned.building}` : ''}${exhausted}\n配比  金 ${wk.mix.gold} · 木 ${wk.mix.wood} · 晶 ${wk.mix.mana}（点 −/+ 调整，自动重新分配）`,
+      `工人 ${wk.total}　金 ${wk.assigned.gold} 木 ${wk.assigned.wood} 晶 ${wk.assigned.mana}${wk.assigned.idle ? `　闲置 ${wk.assigned.idle}` : ''}${wk.assigned.building ? `　建造 ${wk.assigned.building}` : ''}${exhausted}\n配比 金${wk.mix.gold} 木${wk.mix.wood} 晶${wk.mix.mana}　−/+ 重分配`,
     );
+    this.workerText.setLineSpacing(4);
     for (let i = 0; i < this.armyTexts.length; i++) {
       const g = st.armies[i];
       this.armyTexts[i].setText(g ? `${g.id} ${g.name} ${g.count}` : '');

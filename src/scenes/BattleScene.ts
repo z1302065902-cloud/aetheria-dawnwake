@@ -36,6 +36,7 @@ import { AutomationSystem } from '../systems/Automation';
 import { ArmyGroupSystem, STANCE_LABEL, type Stance } from '../systems/ArmyGroups';
 import { AdventureSystem } from '../systems/Adventure';
 import { MapEventsSystem } from '../systems/MapEvents';
+import { LightingSystem } from '../systems/Lighting';
 import { Rng } from '../core/Rng';
 import { rollLoot } from '../data/items';
 import type { MissionDef } from '../data/types';
@@ -144,6 +145,7 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
   adventure!: AdventureSystem;
   /** map-level random events (named mapEvents: `events` is Phaser's own Scene EventEmitter) */
   mapEvents!: MapEventsSystem;
+  lighting!: LightingSystem;
   /** per-run random blessing (Roguelite: maps and main objectives stay fixed) */
   runBlessing!: { id: string; name: string; desc: string };
   private fogImage!: Phaser.GameObjects.Image;
@@ -271,6 +273,10 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
     }
     for (const sp of this.map.searchPoints) ruins.push({ x: sp.x, y: sp.y });
     for (const land of this.map.landings) ruins.push({ x: land.x + 26, y: land.y - 30 });
+    // Visual Bible §6: the region's ambient wash, applied to the ground only (below entities)
+    this.lighting = new LightingSystem(this);
+    this.lighting.build(this.mission.map.biome, WORLD_W, WORLD_H);
+
     this.environment.vision = this.vision;
     this.environment.build({ torches, banners, ruins });
 
@@ -452,6 +458,7 @@ export class BattleScene extends Phaser.Scene implements GameCtx {
       }
       // while the player is deciding where to put a building, automation must not spend
       if (this.placementId) this.automation.holdProduction(0.5);
+      this.lighting.update(dt);
       this.environment.update(dt);
       this.automation.update(dt);
       this.armies.update(dt);

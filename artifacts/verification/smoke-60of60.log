@@ -1,37 +1,37 @@
-PASS  boot: Phaser game object created — 6192 ms
+PASS  boot: Phaser game object created — 6294 ms
 PASS  menu: title + 5 main actions rendered — texts=10 rects=5
 PASS  menu: start button located — {"x":800,"y":378}
 PASS  battle: scene created + HUD launched
 PASS  battle: entities spawned (player/enemy/neutral/resources) — {"units":22,"playerUnits":5,"buildings":14,"resources":13,"gold":420,"wood":320,"enemies":10,"neutrals":7,"objectives":9,"hero":true}
 PASS  battle: hero present
 PASS  input: drag box selects player units — {"count":5,"workers":4}
-PASS  economy: workers harvest and bank gold — {"gold":452,"gatherStates":["gather","gather","gather","gather","gather"]}
+PASS  economy: workers harvest and bank gold — {"gold":416,"gatherStates":["gather","gather","gather","gather","gatherGo"]}
 PASS  hud: build button present for a worker selection — 兵营 150金 100木
-PASS  build: barracks site placed by clicking the ground — {"building":true,"construction":0.1924846153846148}
-PASS  build: settlers are assigned to the site — [{"st":"gather","bid":-1,"d":387},{"st":"gather","bid":-1,"d":257},{"st":"buildGo","bid":55,"d":124},{"st":"build","bid":55,"d":97},{"st":"build","bid":55,"d":116}]
-PASS  build: settlers finish construction — {"building":false,"construction":1,"builders":0,"workers":[{"st":"gather","bid":-1,"d":388,"held":true},{"st":"gather","bid":-1,"d":248,"held":true},{"st":"idle","bid":-1,"d":124,"held":true},{"st":"idle","bid":-1,"d":97,"held":true},{"st":"gatherGo","bid":-1,"d":116,"held":true}],"held":4,"speed":8,"wallet":{"gold":327,"wood":256},"deaths":[],"elapsed":65}
+PASS  build: barracks site placed by clicking the ground — {"building":true,"construction":0.1331755384615387}
+PASS  build: settlers are assigned to the site — [{"st":"gather","bid":-1,"d":404},{"st":"build","bid":53,"d":110},{"st":"gather","bid":-1,"d":244},{"st":"buildGo","bid":53,"d":124},{"st":"build","bid":53,"d":114}]
+PASS  build: settlers finish construction — {"building":false,"construction":1,"builders":0,"workers":[{"st":"gather","bid":-1,"d":404,"held":true},{"st":"idle","bid":-1,"d":110,"held":true},{"st":"returnGo","bid":-1,"d":237,"held":true},{"st":"gatherGo","bid":-1,"d":124,"held":true},{"st":"idle","bid":-1,"d":114,"held":true}],"held":4,"speed":8,"wallet":{"gold":291,"wood":244},"deaths":[],"elapsed":53}
 PASS  production: barracks accepts a training order — {"res":"ok","queued":1,"before":0,"gold":510}
-PASS  production: trained unit exists and population is counted — {"footmen":2,"popUsed":11,"popMax":24}
+PASS  production: trained unit exists and population is counted — {"footmen":2,"popUsed":10,"popMax":24}
 PASS  combat: army ordered to attack-move onto the camp — {"army":2,"campX":2180,"campY":820,"enemiesBefore":0}
-PASS  combat: kills registered / hero gained XP or took damage — {"killed":10,"heroXp":120,"heroLevel":2,"heroHp":128,"enemyNear":0,"buildingsDestroyed":[]}
-PASS  hero: death starts a respawn timer and the hero comes back — {"dead":false,"respawning":false,"timer":0,"hp":128}
-PASS  hero: whirlwind casts and starts a channel — {"res":{"ok":true},"before":0,"after":12.6,"channelling":true,"level":2,"mana":142,"skills":[{"id":"shieldCharge","cd":0,"mana":15},{"id":"warCry","cd":0,"mana":20},{"id":"whirlwind","cd":0,"mana":25},{"id":"divineGuard","cd":0,"mana":40}]}
-PASS  hero: shield charge moves the hero toward the target — {"res":{"ok":true},"x0":1905.0070082193579,"y0":780.8396526783599} -> {"x":2100,"y":900}
-PASS  ai: wave timer runs — {"waveIndex":0,"nextIn":999999731,"elapsed":269}
+PASS  combat: kills registered / hero gained XP or took damage — {"killed":7,"heroXp":120,"heroLevel":2,"heroHp":499,"enemyNear":0,"buildingsDestroyed":[]}
+PASS  hero: death starts a respawn timer and the hero comes back — {"dead":false,"respawning":false,"timer":0,"hp":499}
+PASS  hero: whirlwind casts and starts a channel — {"res":{"ok":true},"before":0,"after":14,"channelling":true,"level":2,"mana":142,"skills":[{"id":"shieldCharge","cd":0,"mana":15},{"id":"warCry","cd":0,"mana":20},{"id":"whirlwind","cd":0,"mana":25},{"id":"divineGuard","cd":0,"mana":40}]}
+PASS  hero: shield charge moves the hero toward the target — {"res":{"ok":true},"x0":1900,"y0":780} -> {"x":2100,"y":900}
+PASS  ai: wave timer runs — {"waveIndex":0,"nextIn":999999779,"elapsed":221}
 PASS  boss: spawns when the camp objective completes — {"campDestroyed":1,"bossSpawned":true,"objectives":["done","done","done","active","pending","active","active","active","done"],"boss":{"hp":2900,"x":2020,"y":2100,"phase":1}}
-PASS  boss: takes damage from the army and can summon minions — {"bossHp":2332,"maxHp":2900,"phase":1,"summons":18}
-PASS  mission: victory triggers when all main objectives are complete — {"ended":true,"victory":true,"objectives":[{"text":"采集 400 金币","state":"done"},{"text":"建造一座兵营","state":"done"},{"text":"训练 4 名战斗单位","state":"done"},{"text":"摧毁荒野氏族营地","state":"done"},{"text":"击败棘齿巨兽","state":"done"},{"text":"可选：指挥官全程未阵亡","state":"failed"},{"text":"可选：占领中央魔法神龛","state":"active"},{"text":"可选：探索西南方的古老立石","state":"active"},{"text":"隐藏：猎杀 3 只荒野野兽","state":"done"}],"bossAlive":false}
+PASS  boss: takes damage from the army and can summon minions — {"bossHp":2345,"maxHp":2900,"phase":1,"summons":15}
+PASS  mission: victory triggers when all main objectives are complete — {"ended":true,"victory":true,"objectives":[{"text":"采集 400 金币","state":"done"},{"text":"建造一座兵营","state":"done"},{"text":"训练 4 名战斗单位","state":"done"},{"text":"摧毁荒野氏族营地","state":"done"},{"text":"击败棘齿巨兽","state":"done"},{"text":"可选：指挥官全程未阵亡","state":"done"},{"text":"可选：占领中央魔法神龛","state":"active"},{"text":"可选：探索西南方的古老立石","state":"active"},{"text":"隐藏：猎杀 3 只荒野野兽","state":"done"}],"bossAlive":false}
 PASS  audio: victory switches to the victory track — track = victory
 PASS  ui: result panel offers a retry button
 PASS  ui: retry restarts a clean match
 PASS  mission: losing the castle ends in defeat — {"castleGone":true,"ended":true,"defeat":true}
 PASS  audio: defeat switches to the defeat track — track = defeat
-PASS  relics: save -> live match modifiers — {"mods":{"fireDamage":0.1,"meleeHp":0.08,"buildingHp":0,"goldGain":0,"heroDamage":0.22,"unitSpeed":0.06,"harvestRate":0,"cooldownMul":1},"hudLines":["魔法伤害 +10%","近战单位生命 +8%","英雄伤害 +12%","部队移动速度 +6%"]}
+PASS  relics: save -> live match modifiers — {"mods":{"fireDamage":0.1,"meleeHp":0.08,"buildingHp":0,"goldGain":0,"heroDamage":0.12,"unitSpeed":0.06,"harvestRate":0,"cooldownMul":0.9},"hudLines":["魔法伤害 +10%","近战单位生命 +8%","英雄伤害 +12%","部队移动速度 +6%"]}
 PASS  relics: flame relic gives +10% magic damage — boosted 110.92 vs plain 100.83 → ×1.100
 PASS  relics: warrior relic gives melee units +8% max HP (150→162) — {"footmanMax":162,"archerMax":92}
 PASS  audio: all five music tracks (menu/battle/boss/victory/defeat) are switchable — ["menu","battle","boss","victory","defeat"]
-PASS  loot: a victory drops equipment into the save inventory — 2 → 5 items: ["towerShield","oakRing","emberBlade","voidSigil","thornCrown"]
-PASS  loot: the result panel lists what dropped — ["完成任务：1　可选完成：1　失败：0\n获得金币：270　英雄经验：120\n战利品：余烬之刃、虚空印记、荆棘王冠（可在「英雄 / 装备」里换上）\n进度已保存到本地存档。"]
+PASS  loot: a victory drops equipment into the save inventory — 3 → 5 items: ["emberBlade","wardenPlate","stormAmulet","voidSigil","thornCrown"]
+PASS  loot: the result panel lists what dropped — ["完成任务：1　可选完成：1　失败：0\n获得金币：270　英雄经验：120\n战利品：虚空印记、荆棘王冠（可在「英雄 / 装备」里换上）\n进度已保存到本地存档。"]
 PASS  equipment: test fixture written (a legendary weapon is available) — {"inventory":6}
 PASS  equipment: the inventory row for the legendary weapon is rendered — {"x":962.6666666666665,"y":479,"item":"破潮之矛"}
 PASS  equipment: clicking 装备 writes the slot into the save — {"weapon":"tidePiercer","attack":34}
@@ -50,12 +50,12 @@ PASS  fog: the explore objective is NOT complete before exploring — active
 PASS  fog: the explore objective completes when the stones come into vision — {"stonesVisible":true,"objectiveState":"done","exploredAfter":460}
 PASS  fog: explored ground is remembered after leaving (visible=false, explored=true) — {"nowVisible":false,"stillExplored":true,"exploredTiles":462}
 PASS  formation: 20 units ordered across the bridge — {"west":{"x":1180,"y":1860},"east":{"x":1580,"y":1860}}
-PASS  formation: no two units overlap closer than 0.8×(r1+r2) after crossing — worst gap ratio 0.96 (dist/radii [21,22]) · arrived 17/20 · east 17 · dead 0 · deaths [] · spawns []
+PASS  formation: no two units overlap closer than 0.8×(r1+r2) after crossing — worst gap ratio 0.98 (dist/radii [21,21]) · arrived 17/20 · east 17 · dead 0 · deaths [] · spawns []
 PASS  formation: the squad actually crossed the bridge — east side 17/20 · arrived 17 · still pathing 2
 PASS  performance: 240 real sim ticks ran — 16.03s of simulation advanced
-PASS  performance: simulation tick under 8ms with 100+ units — 0.194 ms/tick · 85 units · 0 projectiles
-PASS  performance: texture count stays within budget (no runaway texture creation) — 234 textures · 1345 display objects in the battle scene
-PASS  performance: no frame stall over 250ms (software rasteriser) — avg 32.4ms worst 50.0ms · 85 units
+PASS  performance: simulation tick under 8ms with 100+ units — 0.218 ms/tick · 85 units · 0 projectiles
+PASS  performance: texture count stays within budget (no runaway texture creation) — 234 textures · 1347 display objects in the battle scene
+PASS  performance: no frame stall over 250ms (software rasteriser) — avg 42.6ms worst 50.1ms · 85 units
 PASS  save: progress persisted to localStorage — {"exists":true,"unlocked":["m01","m02"],"victories":2}
 PASS  console: no page errors during the whole session
 

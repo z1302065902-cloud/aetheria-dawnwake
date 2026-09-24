@@ -18,7 +18,9 @@
     "test:gpu": "node tests/perf-gpu.mjs",
     "test:gpu:uncapped": "UNCAPPED=1 node tests/perf-gpu.mjs",
     "test:singleplayer": "node tests/singleplayer.mjs",
-    "test:campaign": "node tests/campaign.mjs"
+    "test:campaign": "node tests/campaign.mjs",
+    "test:visual": "node tests/visual.mjs",
+    "docs:visual": "node tools/gen-visual-bible.mjs"
   },
   "dependencies": {
     "phaser": "^3.88.2"
