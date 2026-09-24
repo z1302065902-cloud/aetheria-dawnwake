@@ -150,5 +150,5 @@
 | GitHub | ✅ 已发布 | https://github.com/z1302065902-cloud/aetheria-dawnwake |
 | GitHub Pages | ✅ 已验证 200 + 浏览器实测可玩 | https://z1302065902-cloud.github.io/aetheria-dawnwake/ |
 | Vercel | ✅ 已验证 200 + 浏览器实测可玩 | https://aetheria-dawnwake.vercel.app |
-| itch.io | ⛔ **被网络阻断** | itch.io 主站 DNS 被污染（解析到 Facebook IP 段）+ SNI 阻断，DoH 也不通；`html-classic.itch.zone`（已发布游戏的 CDN）可达。项目页未建成。**需要开代理/VPN**；恢复后运行 `scripts/finish-itch-publish.sh` 一键收尾（zip、封面、截图与文案已备在 `/tmp/itch-pkg`）。 |
-| 爱发电 | ⏳ 待你登录 | 文案已备（见上）；登录后我可代为填表。 |
+| itch.io | ⛔ **被网络阻断（需开 VPN）** | 诊断：`itch.io` 被 DNS 污染（解析到 31.13.x / 4.78.x / 103.252.x 等非 itch 的 IP 段），Cloudflare IP 直连也被 SNI 阻断，DoH（cloudflare-dns / dns.google / 1.1.1.1）全部不可达；只有 `html-classic.itch.zone`（Akamai，已发布游戏的 CDN）可达。**本机装了 LetsVPN，进程在跑但隧道未连接**（utun 无 IPv4 地址、默认路由仍走 en0）。项目页因此未建成。→ **连上 LetsVPN 后运行 `scripts/finish-itch-publish.sh`** 一键收尾（zip / 封面 630×500 / 6 张截图 / 全部文案已备在 `/tmp/itch-pkg` 与本文档）。 |
+| 爱发电 | ⏳ 待你登录 | afdian.com 可达但未登录（登录页已由 ego-browser 打开并交还控制权）。文案已备（见上）；登录后我可代为填表。 |
