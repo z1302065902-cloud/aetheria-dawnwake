@@ -105,6 +105,42 @@
 **结论**：GitHub（仓库+Release）、GitHub Pages、Vercel **三者的服务端状态都已确认为正常/Ready**，
 本地对 vercel.app / github 部分 URL 的失败是**本机 DNS 污染与链路抖动**，不是发布失败。
 
+## 第四轮：itch.io 完成 ✅（关键突破：LetsVPN 分流模式）
+
+**突破点**：VPN「看起来没连、实际连了」。诊断链条：
+
+| 检查 | 结果 |
+|---|---|
+| `ifconfig` | `utun6: inet 26.26.26.1` ← **LetsVPN 隧道确实起来了**（`LetsVPN-NE` 扩展进程在跑） |
+| `netstat -rn` | utun6 上有 **31 条精细路由**，但**默认路由仍是 en0** → 分流模式，itch 不在规则里 |
+| `curl https://itch.io/` | 000（走 en0，DNS 污染 + SNI 阻断） |
+| `curl --interface utun6 https://itch.io/` | **200** ✅ ← 决定性证据 |
+| 系统解析器 | `socket.gethostbyname('itch.io')` → `172.67.69.99`（真实 Cloudflare IP；`dig` 仍返回伪造 IP，因为 dig 不走系统解析器顺序） |
+
+**解法**：写 `scripts/tunnel-proxy.py` —— 一个把出站 socket `SO_BINDTODEVICE` 到 utun6 的本地 HTTP 代理，
+于是 CLI 工具一条环境变量即可走隧道，且不需要 sudo：
+
+```bash
+python3 scripts/tunnel-proxy.py utun6 8899 &
+export HTTPS_PROXY=http://127.0.0.1:8899
+curl -x http://127.0.0.1:8899 https://itch.io/     # 200
+```
+
+**itch 发布全部完成**（逐项有证据）：
+
+| 步骤 | 方式 | 结果 |
+|---|---|---|
+| 建项目页 | `scripts/create-itch-page.mjs`（ego-browser 自动化，登录态 zsy2026） | ✅ 跳到 `itch.io/game/edit/5048064` |
+| 封面 630×500 | 同脚本上传（JPEG；PNG 曾被服务端拒） | ✅ 预览确认 |
+| 6 张截图 | 精确点击 `.add_screenshot_btn`（首次点击落在视口外 y=-511 失败） | ✅ 页面上 6 张 347×195 缩略图 |
+| Kind | 编辑页 `textbox [ref=117]` → 选 HTML | ✅ `Kind = HTML` |
+| 可见性 | `game[published]` 单选 → `published`（注意值不是 `public`） | ✅ `published` |
+| 上传本体 | `HTTPS_PROXY=... butler push dist zsy2026/aetheria-dawnwake:html5` | ✅ `UPLOAD #19379983 · BUILD <#2011717 · VERSION ab4a948` |
+| 标题/slug | — | ✅ `Aetheria: Dawnwake · 以太利亚 · 黎明觉醒` / `aetheria-dawnwake` |
+| **简介 + 详细描述** | `page.fill` 无效 → 改 **DOM 赋值 + 派发 input/change** | ✅ 51 字 + 1323 字落盘 |
+| 公开页 | `https://zsy2026.itch.io/aetheria-dawnwake` | ✅ **HTTP 200** |
+| **可玩性** | Playwright 挂代理 → 点 `Run game` → 进 itch 播放器 frame | ✅ `engine: true · splash: false · canvas: true`（唯一失败请求是 itch 自己的 GA） |
+
 ## 第三轮复查：机器处于锁屏状态
 
 用 peekaboo 的权限检查 + 抓屏确认（本轮新增证据）：
