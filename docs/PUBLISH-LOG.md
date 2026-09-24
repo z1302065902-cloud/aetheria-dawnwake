@@ -375,3 +375,22 @@ LetsVPN 后来切到**全局模式**：`route -n get default` → `interface: ut
 | 4 | **itch.io** | ✅ | https://zsy2026.itch.io/aetheria-dawnwake · **$1 付费下载**（Buy Now，无免费 Run game）· 完整版包在 `full-download` 通道 |
 | 5 | **爱发电** | ✅ | https://afdian.com/item/0648e1dcb82911f19d2252540025c377 · **¥7 完整版**（型号「标准版」，上架中，匿名可见） |
 | 6 | **Meta / 脸书** | ✅ | 个人主页 `yao.shun.33` 公开帖（刚刚发布，含四链接与标签） |
+
+
+---
+
+## 第十轮：爱发电商品**封面图已上传** ✅
+
+- 生成方形封面（爱发电推荐正方形）：`release/itch/cover-square.png`（800×800，由 `public/og.png` 居中裁剪）
+- 上传方式：点「添加商品封面」→ 拦截文件选择器 → `chooser.setFiles([...cover-square.png])`
+- **关键：上传后必须等预览出现再保存**（第一次 8 秒就保存，结果封面丢失；这次轮询到「大图出现且"添加商品封面"消失」才点保存 → 持久化成功）
+- 复核：重载编辑页 → 出现 `?imageView2/2/w/640/h/360` 的 360×360 预览、提示消失 ✅
+- 备注：**匿名访问 item 页看不到封面**，与标题被隐藏同理（未认证账号掩码），非上传失败
+- 保存按钮与商品表单同规则：取**面积最小的精确匹配**（页面有多个同名嵌套容器）
+
+## 仍未完成的唯一项（不影响交付）
+
+**itch 删除 `html5` 通道**：butler **没有**删通道命令（只有 push/push-fetch/status），只能在网页操作。
+本次又试了 2 种选择器（`css=.uploader:has-text(...) .delete_btn` 与 `loc=css:.uploader .delete_btn`）均被 ego 判为
+无效/歧义定位。**影响为零**：`Kind=Downloadable` 后该通道不再产生免费网页试玩。
+手动清理路径：编辑页 → Uploads → 含 `aetheria-dawnwake-html5.zip` 的那一行（DOM 上是 `.uploader`）→ More… → Delete file。
